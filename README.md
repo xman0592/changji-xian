@@ -3,6 +3,9 @@
 给一家 3 个包厢（VIP1–VIP3）的「福安菜 × 厦门海鲜」私厨会所使用。
 纯前端 PWA + 可选 Supabase 多人同步；手机浏览器打开，可加到桌面。
 
+**线上地址**：https://xman0592.github.io/changji-xian/
+**仓库**：https://github.com/xman0592/changji-xian
+
 ## 功能
 
 - **聊天转订单**：粘贴客人微信聊天，自动识别日期、时间、人数、餐标、包厢、称呼、电话、忌口、口味、场景、指定菜；缺项提示。
@@ -75,12 +78,16 @@ python -m http.server 8765
 
 > 本地已有示例/正式数据时，第一次登录会提示自动上传到云端（远端表为空时全量推送）。之后每 22 秒拉取一次，改动即时推送。
 
-## 部署到 GitHub Pages
+## 部署到 GitHub Pages（已上线）
 
-1. 新建仓库（如 `xman0592/changji-xian`），把本目录文件推到根目录。
-2. Settings → Pages → Deploy from branch → `main` / root。
-3. 线上地址：`https://xman0592.github.io/changji-xian/`
-4. 手机上用浏览器打开 → 添加到主屏幕。
+当前已部署到 `xman0592/changji-xian`，Pages 从 `main` 根目录发布：
+https://xman0592.github.io/changji-xian/
+
+后续更新：
+1. 改本目录文件。
+2. 同时改 `version.json` 和 `sw.js` 里的 `CACHE` 版本号。
+3. `git add . && git commit -m "..." && git push`，Pages 自动重建。
+4. 手机联网重新打开即拿到新版。
 
 发版：改内容后同时改 `version.json` 和 `sw.js` 里的 `CACHE` 版本号，再 push。
 
