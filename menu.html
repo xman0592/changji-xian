@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f3a32">
+<meta name="description" content="长季鲜私房菜时令菜单：在售、需提前预订和本季下市菜品。">
+<meta property="og:title" content="长季鲜 · 时令菜单">
+<meta property="og:description" content="福安菜 × 厦门海鲜时令菜单。">
+<meta property="og:type" content="website">
+<title>长季鲜 · 时令菜单</title>
+<style>
+  :root { --ink:#1f3a32; --ink2:#2e5a4b; --gold:#b8893f; --gold2:#d9bd85; --cream:#f7f3ea; --paper:#fbf8f1; --line:#e7ddca; --muted:#8a8070; --red:#a63f36; --amber:#a9721c; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif; background:#ece5d7; color:#2b2a26; font-size:15px; line-height:1.6; }
+  .page { max-width:560px; margin:0 auto; min-height:100vh; background:var(--paper); box-shadow:0 0 50px rgba(40,32,18,.16); padding-bottom:40px; }
+  .top { background:linear-gradient(145deg,#1b332c,#2c5345 62%,#3a6855); color:var(--cream); padding:34px 22px 30px; position:relative; overflow:hidden; }
+  .top::before { content:"長季鮮"; position:absolute; right:-12px; bottom:-34px; font-family:"Songti SC","STSong","SimSun",serif; font-size:104px; letter-spacing:6px; color:rgba(231,214,174,.07); white-space:nowrap; }
+  .brand { font-family:"Songti SC","STSong","SimSun",serif; font-size:30px; letter-spacing:6px; font-weight:600; }
+  .brand small { max-width:100%; }
+  .brand small { display:block; font-family:inherit; font-size:11px; letter-spacing:3px; opacity:.62; margin-top:6px; }
+  .title { font-family:"Songti SC","STSong","SimSun",serif; font-size:22px; margin:26px 0 3px; letter-spacing:2px; position:relative; }
+  .sub { font-size:12px; color:rgba(247,243,234,.62); letter-spacing:1px; position:relative; }
+  .wrap { padding:0 18px; margin-top:-16px; position:relative; }
+  .card { background:#fffdf9; border:1px solid var(--line); border-radius:18px; box-shadow:0 10px 30px rgba(47,39,24,.08); padding:16px; }
+  .notice { font-size:12px; color:var(--muted); line-height:1.6; }
+  .tabs { display:flex; gap:5px; background:#efe9dd; border-radius:12px; padding:4px; margin:14px 0 16px; }
+  .tabs button { flex:1; border:0; background:transparent; border-radius:9px; min-height:36px; font-size:13px; color:var(--muted); font-family:inherit; }
+  .tabs button.on { background:#fffdf9; color:var(--ink); font-weight:600; box-shadow:0 2px 8px rgba(47,39,24,.07); }
+  .cat { margin-top:22px; }
+  .cat h3 { font-family:"Songti SC","STSong","SimSun",serif; font-size:17px; letter-spacing:2px; margin:0 2px 8px; color:var(--ink); display:flex; align-items:center; gap:8px; }
+  .cat h3::after { content:""; flex:1; height:1px; background:linear-gradient(90deg,var(--line),transparent); }
+  .dish { display:flex; align-items:flex-start; gap:12px; padding:12px 13px; border-bottom:1px solid #f0eadf; background:#fffdf9; }
+  .dish:last-child { border-bottom:0; }
+  .dish .info { flex:1; min-width:0; }
+  .dish .name { font-size:15.5px; font-weight:500; color:#2b2a26; }
+  .dish .meta { font-size:11.5px; color:var(--muted); margin-top:2px; line-height:1.5; }
+  .dish .price { font-family:"Songti SC","STSong","SimSun",serif; font-size:16px; color:var(--ink2); white-space:nowrap; padding-top:1px; }
+  .tag { display:inline-block; font-size:10.5px; border-radius:6px; padding:1px 6px; margin-left:6px; vertical-align:1px; background:#f3eee3; color:#7a705e; }
+  .tag.pre { background:#fbf0dc; color:var(--amber); }
+  .tag.on { background:#e6f0ea; color:#2d6a52; }
+  .empty { text-align:center; color:var(--muted); padding:50px 20px; font-size:13px; }
+  .foot { text-align:center; margin-top:28px; padding:0 20px; color:var(--muted); font-size:12px; line-height:1.8; }
+  .foot b { color:var(--ink2); font-weight:500; }
+  .live { display:flex; align-items:center; justify-content:center; gap:5px; font-size:11px; color:var(--muted); margin-top:12px; }
+  .dot { width:6px; height:6px; border-radius:50%; background:#b9b1a2; }
+  .dot.on { background:#3c8a67; }
+  .sticky { position:sticky; top:0; z-index:3; background:rgba(251,248,241,.96); backdrop-filter:blur(10px); }
+  @media (max-width:360px){ .brand{font-size:26px} .dish .price{font-size:15px} }
+</style>
+</head>
+<body>
+<div class="page" id="page">
+  <div class="top" id="top">
+    <div class="brand" id="brand">长季鲜<small id="cuisine">福安菜 × 厦门海鲜</small></div>
+    <div class="title">时令菜单</div>
+    <div class="sub" id="updated">今日在售</div>
+  </div>
+  <div class="wrap"><div class="card" id="content"><div class="empty">正在读取菜单…</div></div></div>
+  <div class="foot" id="foot"></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const $=s=>document.querySelector(s);
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  function b64d(str){ let s=String(str||'').replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4) s+='='; const bin=atob(s); const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0)); return new TextDecoder().decode(bytes); }
+  function fmtDate(s){ if(!s) return ''; const d=new Date(s); if(isNaN(d)) return ''; return (d.getMonth()+1)+'月'+d.getDate()+'日 '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+  function readPayload(){ const q=new URLSearchParams(location.search).get('d'); const m=String(location.hash||'').match(/d=([^&]+)/); const raw=q||(m&&m[1]); if(!raw) return null; try{ return JSON.parse(b64d(raw)); }catch(e){ return null; } }
+  function fromLocal(){ try{ const s=JSON.parse(localStorage.getItem('cjx_state_v1')||'null'); if(!s) return null; return { shop:{name:(s.settings||{}).shopName||'长季鲜',cuisine:(s.settings||{}).cuisine||'福安菜 × 厦门海鲜',hours:(s.settings||{}).businessHours||'',phone:(s.settings||{}).phone||''}, dishes:(s.dishes||[]).filter(d=>!d.deleted), updatedAt:s.meta&&s.meta.updatedAt, sync:null, fromLocal:true }; }catch(e){ return null; } }
+  let P = readPayload() || fromLocal();
+  let live = false;
+  let tab = 'all';
+  function normalizeDish(d){ return { name:d.name, category:d.category||'热菜', price:Number(d.price)||0, status:d.status||'on', leadDays:Number(d.lead_days!=null?d.lead_days:d.leadDays)||0, note:d.note||'' }; }
+  async function loadLive(){
+    if(!P || !P.sync || !P.sync.url || !P.sync.anonKey) return;
+    const base=String(P.sync.url).replace(/\/+$/,'');
+    const headers={ 'apikey':P.sync.anonKey, 'Authorization':'Bearer '+P.sync.anonKey };
+    try{
+      const [menuRes, shopRes] = await Promise.all([
+        fetch(base+'/rest/v1/cjx_public_menu?select=*', {headers}),
+        fetch(base+'/rest/v1/cjx_public_shop?select=*', {headers})
+      ]);
+      if(!menuRes.ok) return;
+      const rows=await menuRes.json();
+      if(!Array.isArray(rows) || !rows.length) return;
+      const dishes=rows.map(normalizeDish).filter(d=>d.name && d.status!=='off');
+      const shopRow = shopRes.ok ? (await shopRes.json())[0] : null;
+      P = {
+        shop: { name:(shopRow&&shopRow.shop_name)||P.shop.name, cuisine:(shopRow&&shopRow.cuisine)||P.shop.cuisine, hours:(shopRow&&shopRow.hours)||P.shop.hours, phone:(shopRow&&shopRow.phone)||P.shop.phone },
+        dishes, updatedAt:(shopRow&&shopRow.updated_at)||new Date().toISOString(), sync:P.sync
+      };
+      live=true; render();
+    }catch(e){
+      if(!(P.dishes||[]).length) $('#content').innerHTML='<div class="empty">菜单读取失败，请检查网络或让主人家重新发一份时令菜单。</div>';
+    }
+  }
+  function render(){
+    if(!P){ $('#content').innerHTML='<div class="empty">菜单链接无效或已过期。<br>请让主人家重新发一份时令菜单。</div>'; return; }
+    const shop=P.shop||{};
+    document.title=(shop.name||'长季鲜')+' · 时令菜单';
+    $('#brand').innerHTML=esc(shop.name||'长季鲜')+'<small>'+esc(shop.cuisine||'福安菜 × 厦门海鲜')+'</small>';
+    $('#updated').textContent=live?'菜单已实时更新 · '+fmtDate(P.updatedAt):('菜单更新于 '+(fmtDate(P.updatedAt)||'今日'));
+    if(!(P.dishes||[]).length && P.sync){ $('#content').innerHTML='<div class="empty">正在向门店读取最新菜单…</div>'; return; }
+    if(!(P.dishes||[]).length){ $('#content').innerHTML='<div class="empty">菜单暂时为空，请稍后再看，或直接联系主人家。</div>'; return; }
+    const all=(P.dishes||[]).filter(d=>d.status!=='off');
+    const on=all.filter(d=>d.status!=='preorder');
+    const pre=all.filter(d=>d.status==='preorder');
+    const show = tab==='preorder' ? pre : (tab==='on' ? on : all);
+    const cats=['冷菜','热菜','汤','主食','甜品'];
+    let html='<div class="notice">今日时令菜如下。标「需提前预订」的菜需要提前备料，请订座时一起定下。</div>'+
+      '<div class="tabs"><button class="'+(tab==='all'?'on':'')+'" data-t="all">全部 '+all.length+'</button><button class="'+(tab==='on'?'on':'')+'" data-t="on">在售 '+on.length+'</button><button class="'+(tab==='preorder'?'on':'')+'" data-t="preorder">需预订 '+pre.length+'</button></div>';
+    if(!show.length) html+='<div class="empty">这个分类暂时没有菜品。</div>';
+    cats.forEach(cat=>{
+      const list=show.filter(d=>d.category===cat);
+      if(!list.length) return;
+      html+='<div class="cat"><h3>'+cat+'</h3><div class="card" style="padding:0;overflow:hidden">'+list.map(d=>{
+        const pre=d.status==='preorder';
+        return '<div class="dish"><div class="info"><div class="name">'+esc(d.name)+'<span class="tag '+(pre?'pre':'on')+'">'+(pre?'需提前'+(d.leadDays||1)+'天':'今日在售')+'</span></div>'+
+          (d.note?'<div class="meta">'+esc(d.note)+'</div>':'')+'</div><div class="price">'+(d.price?('¥'+Number(d.price).toLocaleString('zh-CN')):'时价')+'</div></div>';
+      }).join('')+'</div></div>';
+    });
+    if(P.dishes && P.dishes.some(d=>d.status==='off')){
+      html+='<div class="cat"><h3>本季下市</h3><div class="notice" style="padding:0 4px">'+P.dishes.filter(d=>d.status==='off').map(d=>esc(d.name)).join('、')+'　—— 已过季，等下一季再见。</div></div>';
+    }
+    html+='<div class="live"><span class="dot '+(live?'on':'')+'"></span>'+(live?'已连接门店，菜单实时同步':'菜单为分享时快照，以到店为准')+'</div>';
+    $('#content').innerHTML=html;
+    $('#content').querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{ tab=b.dataset.t; render(); }));
+    $('#foot').innerHTML='<b>'+esc(shop.name||'长季鲜')+'</b>'+(shop.hours?'<br>'+esc(shop.hours):'')+'<br>'+(shop.phone?'订座 '+esc(shop.phone)+'　':'')+'菜单随当日到货调整，以到店为准。';
+  }
+  render();
+  loadLive();
+})();
+</script>
+</body>
+</html>

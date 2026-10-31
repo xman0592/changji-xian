@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f3a32">
+<meta name="description" content="长季鲜私房菜邀请函：查看时间、包厢和菜单，在线回复到场人数与忌口。">
+<meta property="og:title" content="长季鲜 · 邀请函">
+<meta property="og:description" content="诚邀您共赴晚宴，请回复到场人数和忌口。">
+<meta property="og:type" content="website">
+<title>长季鲜 · 邀请函</title>
+<style>
+  :root { --ink:#1f3a32; --ink2:#2e5a4b; --gold:#b8893f; --gold2:#d9bd85; --cream:#f7f3ea; --paper:#fbf8f1; --line:#e7ddca; --muted:#8a8070; --red:#a63f36; --amber:#a9721c; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif; background:radial-gradient(900px 500px at 50% -8%,#315c4c,#152a24 70%); color:#2b2a26; font-size:15px; line-height:1.6; min-height:100vh; }
+  .page { max-width:560px; margin:0 auto; padding:26px 16px 50px; }
+  .brand { text-align:center; color:var(--cream); font-family:"Songti SC","STSong","SimSun",serif; font-size:27px; letter-spacing:7px; font-weight:600; }
+  .brand small { display:block; font-size:10.5px; letter-spacing:3px; color:rgba(231,214,174,.62); margin-top:5px; font-family:inherit; }
+  .invite { margin-top:18px; background:var(--paper); border-radius:22px; overflow:hidden; box-shadow:0 24px 70px rgba(8,18,14,.4); border:1px solid rgba(217,189,133,.4); }
+  .invite-head { background:linear-gradient(145deg,#1b332c,#2c5345 60%,#3a6855); color:var(--cream); text-align:center; padding:30px 22px 26px; position:relative; overflow:hidden; }
+  .invite-head::before { content:"宴"; position:absolute; right:-8px; bottom:-40px; font-family:"Songti SC","STSong","SimSun",serif; font-size:120px; color:rgba(231,214,174,.06); }
+  .invite-head .kicker { font-size:11px; letter-spacing:5px; color:var(--gold2); }
+  .invite-head h1 { font-family:"Songti SC","STSong","SimSun",serif; font-size:30px; letter-spacing:3px; margin:10px 0 6px; font-weight:600; }
+  .invite-head p { margin:0; font-size:12.5px; color:rgba(247,243,234,.68); letter-spacing:1px; }
+  .invite-body { padding:22px 22px 24px; }
+  .greet { text-align:center; font-family:"Songti SC","STSong","SimSun",serif; font-size:16px; color:var(--ink); letter-spacing:1px; }
+  .when { text-align:center; margin:14px 0 4px; font-family:"Songti SC","STSong","SimSun",serif; font-size:27px; color:var(--ink); letter-spacing:1px; }
+  .when small { display:block; font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; font-size:12px; color:var(--muted); letter-spacing:1px; margin-top:4px; }
+  .facts { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:18px 0; }
+  .fact { background:#f4eee3; border-radius:12px; padding:10px 12px; }
+  .fact span { display:block; font-size:10.5px; color:var(--muted); letter-spacing:1px; }
+  .fact b { display:block; font-size:14.5px; font-weight:500; color:var(--ink); margin-top:2px; }
+  .divider { height:1px; background:linear-gradient(90deg,transparent,var(--gold),transparent); opacity:.55; margin:18px 0; }
+  .dishes { display:flex; flex-wrap:wrap; gap:6px; }
+  .dish { background:#fffdf9; border:1px solid var(--line); border-radius:8px; padding:3px 9px; font-size:12px; color:#5f5748; }
+  .note { background:#fbf0dc; color:var(--amber); border-radius:10px; padding:9px 11px; font-size:12.5px; margin-top:12px; line-height:1.55; }
+  .rsvp { background:#fffdf9; border:1px solid var(--line); border-radius:16px; padding:16px; margin-top:20px; }
+  .rsvp h2 { font-family:"Songti SC","STSong","SimSun",serif; font-size:18px; margin:0 0 3px; color:var(--ink); letter-spacing:1px; }
+  .rsvp .sub { font-size:11.5px; color:var(--muted); margin:0 0 14px; }
+  .field { margin-bottom:12px; }
+  .field label { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; }
+  .field input, .field textarea { width:100%; min-height:44px; border:1px solid #d9cdb6; border-radius:10px; background:#fdfbf6; padding:9px 11px; font-size:16px; font-family:inherit; outline:none; }
+  .field input:focus, .field textarea:focus { border-color:var(--gold); background:#fff; }
+  .field-row { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+  .seg { display:flex; gap:4px; background:#efe9dd; border-radius:11px; padding:4px; }
+  .seg button { flex:1; min-height:38px; border:0; border-radius:8px; background:transparent; color:var(--muted); font-size:13.5px; font-family:inherit; }
+  .seg button.on { background:#fff; color:var(--ink); font-weight:600; box-shadow:0 2px 7px rgba(47,39,24,.07); }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { border:1px solid #d9cdb6; background:#fdfbf6; color:#6d6352; border-radius:8px; padding:5px 9px; font-size:12.5px; font-family:inherit; }
+  .chip.on { background:var(--red); border-color:var(--red); color:#fff; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; width:100%; min-height:48px; border:0; border-radius:12px; background:var(--ink); color:var(--cream); font-size:15px; font-family:inherit; font-weight:500; }
+  .btn:active { background:var(--ink2); }
+  .btn.gold { background:linear-gradient(135deg,#c39a4f,#b8893f); }
+  .btn.ghost { background:transparent; border:1px solid #d9cdb6; color:var(--ink2); }
+  .btn:disabled { opacity:.55; }
+  .hint { font-size:11px; color:var(--muted); line-height:1.6; margin-top:8px; }
+  .success { text-align:center; padding:8px 2px 2px; }
+  .success .tick { width:56px; height:56px; border-radius:50%; background:#e6f0ea; color:#2d6a52; display:flex; align-items:center; justify-content:center; margin:0 auto 12px; font-size:26px; }
+  .success h3 { font-family:"Songti SC","STSong","SimSun",serif; font-size:20px; margin:0 0 5px; color:var(--ink); }
+  .success p { font-size:12.5px; color:var(--muted); margin:0 0 12px; }
+  .code { font-family:ui-monospace,Consolas,monospace; font-size:10.5px; line-height:1.5; word-break:break-all; background:#f2ecdf; border:1px solid var(--line); border-radius:9px; padding:9px; color:#5f5748; text-align:left; max-height:110px; overflow:auto; }
+  .foot { text-align:center; color:rgba(247,243,234,.55); font-size:11.5px; line-height:1.8; margin-top:20px; }
+  .foot b { color:var(--gold2); font-weight:500; }
+  .empty { background:var(--paper); border-radius:18px; padding:40px 22px; text-align:center; color:var(--muted); margin-top:18px; }
+  .hidden { display:none !important; }
+  @media (max-width:360px){ .when{font-size:23px} .invite-head h1{font-size:26px} }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="brand">長季鮮<small id="brandSub">福安菜 × 厦门海鲜</small></div>
+  <div id="app"></div>
+  <div class="foot" id="foot"></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const $=s=>document.querySelector(s);
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  function b64d(str){ let s=String(str||'').replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4) s+='='; const bin=atob(s); const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0)); return new TextDecoder().decode(bytes); }
+  function b64e(str){ const bytes=new TextEncoder().encode(str); let bin=''; bytes.forEach(b=>bin+=String.fromCharCode(b)); return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+  function readPayload(){ const q=new URLSearchParams(location.search).get('d'); const m=String(location.hash||'').match(/d=([^&]+)/); const raw=q||(m&&m[1]); if(!raw) return null; try{ return JSON.parse(b64d(raw)); }catch(e){ return null; } }
+  function fmtDate(s){ if(!s) return ''; const p=String(s).split('-').map(Number); const d=new Date(p[0],(p[1]||1)-1,p[2]||1); return (d.getMonth()+1)+'月'+d.getDate()+'日 周'+('日一二三四五六'[d.getDay()]); }
+  function uid(){ return (window.crypto&&crypto.randomUUID)?crypto.randomUUID().replace(/-/g,'').slice(0,16):('r'+Date.now().toString(36)+Math.random().toString(36).slice(2,8)); }
+  const P=readPayload();
+  const DIETS=['无忌口','海鲜过敏','不吃辣','素食','不吃牛羊肉','不吃猪肉','坚果过敏','不吃香菜','不吃花生','少油少盐'];
+  let state={attend:true,dietary:[],submitted:false,receipt:'',cloudOk:false,busy:false};
+
+  function render(){
+    if(!P||!P.order){ $('#app').innerHTML='<div class="empty">邀请函链接无效或已过期。<br>请让主人家重新发一份。</div>'; return; }
+    const shop=P.shop||{}; const o=P.order||{};
+    const dishes=(o.dishes||[]).slice(0,10);
+    const head='<div class="invite"><div class="invite-head"><div class="kicker">INVITATION</div><h1>诚 邀 赴 宴</h1><p>'+esc(shop.cuisine||'福安菜 × 厦门海鲜')+(shop.name?' · '+esc(shop.name):'')+'</p></div>'+
+      '<div class="invite-body"><div class="greet">'+esc(o.host||'贵客')+' 及同席亲友，见字如面：</div>'+
+      '<div class="when">'+esc(fmtDate(o.date))+' '+esc(o.time||'')+'<small>'+esc(o.room||'私厨包厢')+' · '+(o.partySize||'')+' 位</small></div>'+
+      '<div class="facts"><div class="fact"><span>宴请场合</span><b>'+esc(o.occasion||'私厨晚宴')+'</b></div><div class="fact"><span>包厢</span><b>'+esc(o.room||'待定')+'</b></div>'+
+      '<div class="fact"><span>到场时间</span><b>'+esc(o.time||'')+'</b></div><div class="fact"><span>人数</span><b>'+(o.partySize||'')+' 位</b></div></div>'+
+      (dishes.length?'<div class="divider"></div><div class="greet" style="font-size:13px;color:var(--muted);margin-bottom:8px">当日菜单 · 以到店为准</div><div class="dishes">'+dishes.map(d=>'<span class="dish">'+esc(d)+'</span>').join('')+'</div>':'')+
+      (o.special?'<div class="note">'+esc(o.special)+'</div>':'')+'</div></div>';
+    const foot='<div class="foot"><b>'+esc(shop.name||'长季鲜')+'</b>'+(shop.hours?'<br>'+esc(shop.hours):'')+(shop.phone?'<br>订座 '+esc(shop.phone):'')+'<br>请提前告知忌口，厨房好为您准备。</div>';
+    $('#foot').innerHTML=foot;
+    $('#brandSub').textContent=(shop.cuisine||'福安菜 × 厦门海鲜');
+    if(state.submitted){
+      $('#app').innerHTML=head+'<div class="rsvp success"><div class="tick">✓</div><h3>'+(state.cloudOk?'回执已提交':'回执已生成')+'</h3>'+
+        '<p>'+(state.cloudOk?'主人家已经能看到你的到场人数和忌口。':'请把下面的回执码复制发给邀请人，主人家录入后即可同步。')+'</p>'+
+        '<div class="code" id="receiptCode">'+esc(state.receipt)+'</div>'+
+        '<div style="margin-top:12px"><button class="btn gold" id="copyBtn">复制回执码</button></div>'+
+        '<div style="margin-top:9px"><button class="btn ghost" id="againBtn">再帮一位亲友回执</button></div>'+
+        '<div class="hint">'+(state.cloudOk?'如果主人家没收到，也可以把回执码发给他手动录入。':'多人同行时，每位亲友各提交一次即可。')+'</div></div>';
+      $('#copyBtn').addEventListener('click',()=>copy(state.receipt));
+      $('#againBtn').addEventListener('click',()=>{ state={attend:true,dietary:[],submitted:false,receipt:'',cloudOk:false,busy:false}; render(); });
+      return;
+    }
+    $('#app').innerHTML=head+'<div class="rsvp"><h2>赴宴回执</h2><p class="sub">请填写到场情况，方便厨房按人数备菜；忌口请务必写清。</p>'+
+      '<div class="field"><label>你的称呼</label><input id="gName" type="text" placeholder="如：王太太 / 小林" value=""></div>'+
+      '<div class="field-row"><div class="field"><label>电话（选填）</label><input id="gPhone" type="tel" inputmode="tel" placeholder="方便主人家联系"></div>'+
+      '<div class="field"><label>到场人数</label><input id="gSize" type="number" inputmode="numeric" min="1" max="30" value="1"></div></div>'+
+      '<div class="field"><label>是否到场</label><div class="seg" id="attendSeg"><button class="'+(state.attend?'on':'')+'" data-v="1">准时到场</button><button class="'+(state.attend?'':'on')+'" data-v="0">这次来不了</button></div></div>'+
+      '<div class="field" id="dietField"><label>个人忌口（可多选）</label><div class="chips" id="dietChips">'+DIETS.map(x=>'<button class="chip '+(state.dietary.includes(x)?'on':'')+'" data-v="'+x+'">'+x+'</button>').join('')+'</div>'+
+      '<input id="dietCustom" class="mt8" type="text" placeholder="补充：如不吃葱蒜、儿童餐" style="width:100%;min-height:42px;border:1px solid #d9cdb6;border-radius:10px;background:#fdfbf6;padding:9px 11px;font-size:15px;margin-top:8px"></div>'+
+      '<button class="btn gold" id="submitBtn">提交回执</button>'+
+      '<div class="hint">提交后主人家会收到你的到场人数和忌口。'+(P.sync?'':'如果网络不通，会生成一段回执码，复制发给邀请人即可。')+'</div></div>';
+    bind();
+  }
+  function bind(){
+    document.querySelectorAll('#attendSeg button').forEach(b=>b.addEventListener('click',()=>{ state.attend=b.dataset.v==='1'; document.querySelectorAll('#attendSeg button').forEach(x=>x.classList.toggle('on',x.dataset.v===b.dataset.v)); $('#dietField').classList.toggle('hidden',!state.attend); }));
+    document.querySelectorAll('#dietChips button').forEach(b=>b.addEventListener('click',()=>{
+      const v=b.dataset.v;
+      if(v==='无忌口'){ state.dietary=[]; document.querySelectorAll('#dietChips button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); return; }
+      const i=state.dietary.indexOf(v); if(i>=0) state.dietary.splice(i,1); else state.dietary.push(v);
+      b.classList.toggle('on',state.dietary.includes(v));
+      document.querySelectorAll('#dietChips button').forEach(x=>{ if(x.dataset.v==='无忌口') x.classList.toggle('on',state.dietary.length===0); });
+    }));
+    $('#submitBtn').addEventListener('click',submitRsvp);
+  }
+  async function copy(text){
+    try{ if(navigator.clipboard&&window.isSecureContext){ await navigator.clipboard.writeText(text); } else { const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); } const b=$('#copyBtn'); if(b){ const old=b.textContent; b.textContent='已复制'; setTimeout(()=>b.textContent=old,1500); } }catch(e){ alert('复制失败，请长按回执码手动复制'); }
+  }
+  async function submitRsvp(){
+    if(state.busy) return;
+    const name=(($('#gName')||{}).value||'').trim();
+    if(!name){ alert('请填写你的称呼'); return; }
+    const phone=(($('#gPhone')||{}).value||'').trim();
+    const size=state.attend?(Number((($('#gSize')||{}).value)||1)):0;
+    const custom=(($('#dietCustom')||{}).value||'').trim();
+    const dietary=state.dietary.filter(x=>x!=='无忌口');
+    if(custom) custom.split(/[，,、\s]+/).forEach(x=>{ if(x&&dietary.indexOf(x)<0) dietary.push(x); });
+    const id=uid(); const submittedAt=new Date().toISOString();
+    const inviteCode=(P.sync&&P.sync.inviteCode)||(P.order&&P.order.code)||'';
+    const payload={ v:1, id, inviteCode, name, phone, attend:state.attend, dietary, partySize:size||1, submittedAt, source:'invite' };
+    const receipt='CJXRSVP1:'+b64e(JSON.stringify(payload));
+    state.busy=true; state.receipt=receipt;
+    const btn=$('#submitBtn'); if(btn){ btn.disabled=true; btn.textContent='正在提交…'; }
+    let ok=false;
+    if(P.sync&&P.sync.url&&P.sync.anonKey){
+      try{
+        const row={ id, order_id:P.sync.orderId||(P.order&&P.order.id)||'', invite_code:inviteCode, guest_name:name, phone, attend:state.attend, dietary, party_size:size||1, submitted_at:submittedAt, source:'invite' };
+        const res=await fetch(String(P.sync.url).replace(/\/+$/,'')+'/rest/v1/cjx_rsvps',{method:'POST',headers:{'apikey':P.sync.anonKey,'Authorization':'Bearer '+P.sync.anonKey,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(row)});
+        ok=res.ok;
+      }catch(e){ ok=false; }
+    }
+    state.busy=false; state.cloudOk=ok; state.submitted=true; render();
+  }
+  render();
+})();
+</script>
+</body>
+</html>
