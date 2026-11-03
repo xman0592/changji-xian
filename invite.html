@@ -60,6 +60,20 @@
   .success h3 { font-family:"Songti SC","STSong","SimSun",serif; font-size:20px; margin:0 0 5px; color:var(--ink); }
   .success p { font-size:12.5px; color:var(--muted); margin:0 0 12px; }
   .code { font-family:ui-monospace,Consolas,monospace; font-size:10.5px; line-height:1.5; word-break:break-all; background:#f2ecdf; border:1px solid var(--line); border-radius:9px; padding:9px; color:#5f5748; text-align:left; max-height:110px; overflow:auto; }
+  .signboard { margin: -12px 22px 0; background:linear-gradient(145deg,#1b332c,#2c5345 65%,#37624f); border:1.5px solid rgba(217,189,133,.85); border-radius:14px; padding:13px 16px 12px; text-align:center; box-shadow:0 10px 24px rgba(8,18,14,.18); position:relative; z-index:2; }
+  .signboard b { display:block; font-family:"Songti SC","STSong","SimSun",serif; font-size:21px; letter-spacing:4px; color:#f2e6c9; }
+  .signboard span { display:block; font-size:11.5px; color:rgba(231,214,174,.82); margin-top:4px; letter-spacing:1px; }
+  .signboard i { display:block; font-style:normal; font-size:9.5px; color:rgba(231,214,174,.45); margin-top:6px; letter-spacing:1.5px; }
+  .sec-title { text-align:center; font-size:10.5px; letter-spacing:3px; color:var(--gold); margin:16px 0 8px; }
+  .classic { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .classic .it { background:#f4eee3; border:1px solid var(--line); border-radius:11px; padding:9px 7px; text-align:center; }
+  .classic .it b { display:block; font-family:"Songti SC","STSong","SimSun",serif; font-size:12.5px; color:var(--ink); line-height:1.35; }
+  .classic .it span { display:block; font-size:9.5px; color:var(--muted); margin-top:3px; line-height:1.4; }
+  .locate { background:#fffdf9; border:1px solid var(--line); border-radius:14px; padding:13px 14px; margin-top:16px; }
+  .locate .addr { font-size:12.5px; color:#4f4a40; line-height:1.65; }
+  .locate a.nav { display:flex; align-items:center; justify-content:center; gap:6px; margin-top:10px; min-height:44px; border-radius:11px; background:var(--ink); color:var(--cream); text-decoration:none; font-size:14px; font-weight:500; }
+  .locate a.nav:active { background:var(--ink2); }
+  .locate .hint2 { font-size:10.5px; color:var(--muted); margin-top:7px; text-align:center; }
   .foot { text-align:center; color:rgba(247,243,234,.55); font-size:11.5px; line-height:1.8; margin-top:20px; }
   .foot b { color:var(--gold2); font-weight:500; }
   .empty { background:var(--paper); border-radius:18px; padding:40px 22px; text-align:center; color:var(--muted); margin-top:18px; }
@@ -91,14 +105,21 @@
     if(!P||!P.order){ $('#app').innerHTML='<div class="empty">邀请函链接无效或已过期。<br>请让主人家重新发一份。</div>'; return; }
     const shop=P.shop||{}; const o=P.order||{};
     const dishes=(o.dishes||[]).slice(0,10);
+    const classic=(P.classic||[]).filter(x=>x&&x.name);
     const head='<div class="invite"><div class="invite-head"><div class="kicker">INVITATION</div><h1>诚 邀 赴 宴</h1><p>'+esc(shop.cuisine||'福安菜 × 厦门海鲜')+(shop.name?' · '+esc(shop.name):'')+'</p></div>'+
+      '<div class="signboard"><b>'+esc(shop.name||'长季鲜')+'</b><span>'+esc(shop.slogan||'时令海鲜 · 私厨家宴')+(shop.adText?' · '+esc(shop.adText):'')+'</span><i>店 招 广 告 位</i></div>'+
       '<div class="invite-body"><div class="greet">'+esc(o.host||'贵客')+' 及同席亲友，见字如面：</div>'+
       '<div class="when">'+esc(fmtDate(o.date))+' '+esc(o.time||'')+'<small>'+esc(o.room||'私厨包厢')+' · '+(o.partySize||'')+' 位</small></div>'+
       '<div class="facts"><div class="fact"><span>宴请场合</span><b>'+esc(o.occasion||'私厨晚宴')+'</b></div><div class="fact"><span>包厢</span><b>'+esc(o.room||'待定')+'</b></div>'+
       '<div class="fact"><span>到场时间</span><b>'+esc(o.time||'')+'</b></div><div class="fact"><span>人数</span><b>'+(o.partySize||'')+' 位</b></div></div>'+
       (dishes.length?'<div class="divider"></div><div class="greet" style="font-size:13px;color:var(--muted);margin-bottom:8px">当日菜单 · 以到店为准</div><div class="dishes">'+dishes.map(d=>'<span class="dish">'+esc(d)+'</span>').join('')+'</div>':'')+
-      (o.special?'<div class="note">'+esc(o.special)+'</div>':'')+'</div></div>';
-    const foot='<div class="foot"><b>'+esc(shop.name||'长季鲜')+'</b>'+(shop.hours?'<br>'+esc(shop.hours):'')+(shop.phone?'<br>订座 '+esc(shop.phone):'')+'<br>请提前告知忌口，厨房好为您准备。</div>';
+      (classic.length?'<div class="sec-title">经 典 菜 品</div><div class="classic">'+classic.slice(0,3).map(x=>'<div class="it"><b>'+esc(x.name)+'</b><span>'+esc(x.note||'招牌必点')+'</span></div>').join('')+'</div>':'')+
+      (o.special?'<div class="note">'+esc(o.special)+'</div>':'')+
+      ((shop.address||shop.nav)?'<div class="locate"><div class="addr">'+esc(shop.address||'')+'</div>'+
+        (shop.nav?'<a class="nav" href="'+esc(shop.nav)+'" target="_blank" rel="noopener">一键导航到 '+esc(shop.name||'长季鲜')+'</a>':'')+
+        '<div class="hint2">点「一键导航」会调起手机里的高德 / 百度地图；自驾可先发给司机。</div></div>':'')+
+      '</div></div>';
+    const foot='<div class="foot"><b>'+esc(shop.name||'长季鲜')+'</b>'+(shop.address?'<br>'+esc(shop.address):'')+(shop.hours?'<br>'+esc(shop.hours):'')+(shop.phone?'<br>订座 '+esc(shop.phone):'')+'<br>请提前告知忌口，厨房好为您准备。</div>';
     $('#foot').innerHTML=foot;
     $('#brandSub').textContent=(shop.cuisine||'福安菜 × 厦门海鲜');
     if(state.submitted){

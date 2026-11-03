@@ -2,7 +2,7 @@
 (function (global) {
   'use strict';
 
-  const APP_VERSION = '1.2.2';
+  const APP_VERSION = '1.3.0';
   const CATEGORIES = ['冷菜', '热菜', '汤', '主食', '甜品'];
 
   const DIET_OPTIONS = ['无忌口', '海鲜过敏', '不吃海鲜', '素食', '不吃辣', '不吃牛羊肉', '不吃猪肉', '不吃蛋', '坚果过敏', '不吃香菜', '少油少盐', '控糖'];
@@ -71,7 +71,7 @@
   }
   function defaultDishes() {
     // 菜名来自 D:\长季鲜\福安特色菜.xls（33 道），价格/分类为参考值，可在「时令菜」里改。
-    return [
+    return markClassic([
       // 冷菜
       dish('d01', '生腌小白虾', '冷菜', 88, 'on', 0, ['海鲜', '生'], ['鲜', '清爽'], '福安特色生腌'),
       dish('d02', '闽东鱼干三拼', '冷菜', 98, 'on', 0, ['海鲜'], ['鲜', '家常'], '闽东鱼干'),
@@ -121,15 +121,32 @@
       dish('b01', '时令时蔬', '热菜', 38, 'on', 0, ['素'], ['清淡'], '基础配菜'),
       dish('b02', '蒜蓉时蔬', '热菜', 38, 'on', 0, ['素'], ['清淡'], '基础配菜'),
       dish('b03', '时令果盘', '甜品', 58, 'on', 0, ['素'], ['清爽'], '基础配菜')
-    ];
+    ]);
+  }
+  // 招牌 / 经典菜：邀请函和菜单链接会优先展示这几道
+  const CLASSIC_NAMES = ['生腌小白虾', '醉排骨', '焖河豚', '清蒸海区大黄鱼', '半酒炖蛏', '穆阳花饺'];
+  function markClassic(list) {
+    list.forEach((d) => { if (CLASSIC_NAMES.indexOf(d.name) >= 0) d.classic = true; });
+    return list;
   }
 
   function defaultRooms() {
+    // 3 个包厢：VIP1 / VIP2 坐 10–12 人，VIP3 坐 15–18 人（seats 保留为上限，兼容旧逻辑）
     return [
-      { id: 'r1', name: 'VIP1', seats: 12, sort: 1, enabled: true, note: '', updatedAt: nowISO(), deleted: false, _dirty: false },
-      { id: 'r2', name: 'VIP2', seats: 10, sort: 2, enabled: true, note: '', updatedAt: nowISO(), deleted: false, _dirty: false },
-      { id: 'r3', name: 'VIP3', seats: 16, sort: 3, enabled: true, note: '', updatedAt: nowISO(), deleted: false, _dirty: false }
+      { id: 'r1', name: 'VIP1', minSeats: 10, maxSeats: 12, seats: 12, sort: 1, enabled: true, note: '10–12 人', updatedAt: nowISO(), deleted: false, _dirty: false },
+      { id: 'r2', name: 'VIP2', minSeats: 10, maxSeats: 12, seats: 12, sort: 2, enabled: true, note: '10–12 人', updatedAt: nowISO(), deleted: false, _dirty: false },
+      { id: 'r3', name: 'VIP3', minSeats: 15, maxSeats: 18, seats: 18, sort: 3, enabled: true, note: '15–18 人', updatedAt: nowISO(), deleted: false, _dirty: false }
     ];
+  }
+  function roomCap(r) {
+    const max = Number(r && (r.maxSeats != null ? r.maxSeats : r.seats)) || 0;
+    const min = Number(r && r.minSeats) || 0;
+    return { min, max };
+  }
+  function roomCapText(r) {
+    const c = roomCap(r);
+    if (!c.max) return '—';
+    return (c.min ? c.min + '–' + c.max : String(c.max)) + ' 人';
   }
 
   function defaultSettings() {
@@ -140,6 +157,10 @@
       businessHours: '17:00–22:00',
       address: '',
       phone: '',
+      slogan: '时令海鲜 · 私厨家宴',
+      adText: '',
+      lat: '',
+      lng: '',
       pins: { boss: '', manager: '', kitchen: '', service: '' },
       backupReminderDays: 7,
       aiPrompt: '你是长季鲜私厨会所（福安菜 × 厦门海鲜融合）的预定助手。店里不卖福安炖罐，也没有一堆福安小吃，小吃只保留「穆阳花饺」一道。请从下面的微信聊天记录中提取预定信息，只输出 JSON，不要解释。字段：date（YYYY-MM-DD，相对日期按今天换算）、time（HH:MM）、partySize（数字）、customerName、phone、wechat、roomName、budget（餐标金额，数字）、budgetMode（table 每桌 / person 每位）、occasion、dietary（数组）、special、dishes（数组）、notes。缺失的字段留空字符串或空数组。',
@@ -150,7 +171,7 @@
   function defaultState() {
     return {
       meta: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         rev: 0,
         updatedAt: nowISO(),
         deviceId: uid('dev_'),
@@ -177,74 +198,13 @@
       status: d.status, leadDays: d.leadDays, flavor: d.flavor || []
     }));
   }
-  function seedDemo(S) {
-    const t = todayStr();
-    S.dishes = defaultDishes();
-    S.rooms = defaultRooms();
-    S.settings = defaultSettings();
-    S.settings.shopName = '长季鲜';
-    S.settings.subtitle = '私厨会所';
-
-    const customers = [
-      { id: 'c1', name: '王建国', aliases: ['王总'], wechat: 'wangjg', phone: '13805920001', tags: ['老友', 'VIP'], dietary: [], tasteTags: ['鲜', '时令', '清蒸', '清淡'], tasteScores: { '鲜': 5, '时令': 4, '清蒸': 2, '清淡': 2 }, dishCounts: { '生腌虾菇': 2, '原汁目鱼': 2, '蒸大口鱼': 1, '美人鱼炒姜': 1 }, prefRoom: 'r1', notes: '熟客，喜欢福安海鲜和时令鱼；太太不吃香菜。', visitCount: 3, lastVisit: addDays(t, -1), budgetPref: 3880, budgetMode: 'table' },
-      { id: 'c2', name: '林雅', aliases: ['林女士'], wechat: 'linya', phone: '13905920002', tags: ['素食'], dietary: ['素食'], tasteTags: ['清淡', '甜', '清爽'], tasteScores: { '清淡': 4, '甜': 3, '清爽': 2 }, dishCounts: { '绿笋炒嫩姜': 2, '畲族乌米饭': 2, '时令时蔬': 1 }, prefRoom: 'r2', notes: '全素，不吃葱蒜；可让厨房单做素菜。', visitCount: 2, lastVisit: addDays(t, -1), budgetPref: 2000, budgetMode: 'table' },
-      { id: 'c3', name: '张宏伟', aliases: ['张总'], wechat: 'zhanghw', phone: '13605920003', tags: ['商务', 'VIP'], dietary: ['不吃辣'], tasteTags: ['浓', '滋补', '商务'], tasteScores: { '浓': 4, '滋补': 3, '商务': 2 }, dishCounts: { '焖河豚': 2, '荷叶蒸鳗鱼': 1, '目鱼蛋鸡腰生蚝半酒炖': 1 }, prefRoom: 'r3', notes: '商务接待为主，要面子，喜欢河豚和半酒炖。', visitCount: 2, lastVisit: addDays(t, -7), budgetPref: 5000, budgetMode: 'table' },
-      { id: 'c4', name: '陈志远', aliases: ['陈先生'], wechat: 'chenzy', phone: '13705920004', tags: ['家宴'], dietary: [], tasteTags: ['鲜', '浓'], tasteScores: { '鲜': 3, '浓': 2 }, dishCounts: { '醉排骨': 1, '炒麦螺': 1, '海鲜炒米粉': 1 }, prefRoom: 'r1', notes: '一家老小，孩子 6 岁。', visitCount: 1, lastVisit: addDays(t, -30), budgetPref: 3000, budgetMode: 'table' },
-      { id: 'c5', name: '李敏', aliases: ['李女士'], wechat: 'limin', phone: '13505920005', tags: ['朋友'], dietary: ['不吃牛羊肉'], tasteTags: ['清淡', '甜'], tasteScores: { '清淡': 2, '甜': 2 }, dishCounts: {}, prefRoom: 'r2', notes: '', visitCount: 0, lastVisit: '', budgetPref: 1500, budgetMode: 'table' },
-      { id: 'c6', name: '周文', aliases: ['周先生'], wechat: 'zhouwen', phone: '13405920006', tags: ['纪念日'], dietary: [], tasteTags: ['鲜', '清蒸'], tasteScores: { '鲜': 2, '清蒸': 1 }, dishCounts: {}, prefRoom: 'r3', notes: '纪念日喜欢安静包厢。', visitCount: 0, lastVisit: '', budgetPref: 2200, budgetMode: 'table' }
-    ];
-    customers.forEach((c) => { c.updatedAt = nowISO(); c.deleted = false; c._dirty = false; });
-    S.customers = customers;
-
-    function mk(o) {
-      const dishes = dishObjs(S, o.dishNames || []);
-      const cust = customers.find((c) => c.id === o.customerId);
-      const id = o.id || uid('o_');
-      return {
-        id, code: 'CJX-' + o.date.replace(/-/g, '') + '-' + (o.seq || '01'),
-        status: o.status, date: o.date, time: o.time, partySize: o.partySize,
-        roomId: o.roomId || '', customerId: o.customerId || '', customerName: o.customerName || (cust ? cust.name : ''),
-        phone: o.phone || (cust ? cust.phone : ''), wechat: o.wechat || (cust ? cust.wechat : ''),
-        occasion: o.occasion || '', dishes,
-        dietary: o.dietary || (cust ? cust.dietary.slice() : []),
-        special: o.special || '', hostName: o.hostName || '', notes: o.notes || '',
-        budget: o.budget || null, budgetMode: o.budgetMode || 'table', menuSource: o.menuSource || 'manual',
-        guests: o.guests || [], inviteCode: o.inviteCode || '', inviteAt: o.inviteAt || '',
-        serviceChecks: Object.assign({ tableware: false, pitcher: false, water: false }, o.serviceChecks || {}),
-        missing: o.missing || [], changeLog: o.changeLog || [{ at: nowISO(), by: o.createdBy || '老板', text: '创建预定' }],
-        audit: Object.assign({ createdAt: nowISO(), createdBy: o.createdBy || '老板', updatedAt: nowISO(), updatedBy: o.createdBy || '老板' }, o.audit || {}),
-        updatedAt: o.updatedAt || nowISO(), deleted: false, _dirty: false,
-        changePending: false
-      };
-    }
-
-    const orders = [
-      mk({ id: 'o1', seq: '01', status: 'notified', date: t, time: '18:00', partySize: 10, roomId: 'r1', customerId: 'c3', customerName: '张总', occasion: '商务宴请', dishNames: ['醉排骨', '生腌小白虾', '闽东鱼干三拼', '焖河豚', '荷叶蒸鳗鱼', '美人鱼炒姜', '蒸大口鱼', '土鲍炒荠菜梗', '爆炒猪腰', '目鱼蛋鸡腰生蚝半酒炖', '海鲜炒米粉', '时令果盘'], dietary: ['不吃辣'], special: '商务接待，准备茶室', budget: 5000, budgetMode: 'table', serviceChecks: { tableware: true, pitcher: true, water: true }, createdBy: '店长', audit: { confirmedAt: nowISO(), notifiedAt: nowISO() } }),
-      mk({ id: 'o2', seq: '02', status: 'notified', date: t, time: '18:30', partySize: 8, roomId: 'r2', customerId: 'c1', customerName: '王总', occasion: '生日', dishNames: ['生腌虾菇', '韩城二都蛤', '原汁目鱼', '美人鱼炒姜', '蒸大口鱼', '干煎黄鱼鲞', '五花肉炒贡菜', '绿笋炒嫩姜', '半酒炖蛏', '土鲍炒荠菜梗', '海鲜炒地瓜粉扣', '穆阳花饺', '畲族乌米饭', '时令果盘'], special: '生日蛋糕、包厢简单布置', budget: 3880, budgetMode: 'table', serviceChecks: { tableware: true, pitcher: true, water: false }, inviteCode: 'INV-WANG88', inviteAt: nowISO(), createdBy: '老板', audit: { confirmedAt: nowISO(), notifiedAt: nowISO() }, guests: [{ id: 'rs1', name: '王太太', attend: true, dietary: ['不吃香菜'], partySize: 1, submittedAt: nowISO(), source: 'invite' }] }),
-      mk({ id: 'o3', seq: '03', status: 'pending', date: t, time: '19:30', partySize: 6, roomId: 'r3', customerId: 'c2', customerName: '林女士', occasion: '朋友小聚', dishNames: ['绿笋炒嫩姜', '时令时蔬', '蒜蓉时蔬', '畲族乌米饭', '时令果盘'], dietary: ['素食'], special: '', phone: '', budget: 2000, budgetMode: 'table', createdBy: '老板', missing: ['电话', '忌口确认', '时令菜确认', '特殊安排确认'] }),
-      mk({ id: 'o4', seq: '01', status: 'confirmed', date: addDays(t, 1), time: '18:30', partySize: 12, roomId: 'r1', customerId: 'c4', customerName: '陈先生', occasion: '家宴', dishNames: ['醉排骨', '牛肉炒嫩姜', '炒麦螺', '鱿鱼焖豆腐', '五花肉炒笋干', '绿笋炒嫩姜', '半酒炖蛏', '焖丝丁鱼', '蒸大口鱼', '土鲍烩广芥', '海鲜炒米粉', '穆阳花饺', '时令果盘'], dietary: [], special: '儿童座椅 1 个', budget: 3000, budgetMode: 'table', serviceChecks: { tableware: true, pitcher: false, water: false }, createdBy: '老板', audit: { confirmedAt: nowISO() } }),
-      mk({ id: 'o5', seq: '02', status: 'pending', date: addDays(t, 1), time: '19:00', partySize: 4, roomId: 'r2', customerId: 'c5', customerName: '李女士', occasion: '朋友聚会', dishNames: ['生腌小白虾', '醉排骨', '鱿鱼焖豆腐', '绿笋炒嫩姜', '原汁目鱼', '蒸大口鱼', '海竹酸辣汤', '海鲜炒米粉'], dietary: ['不吃牛羊肉'], special: '', budget: 1500, budgetMode: 'table', createdBy: '老板', missing: ['电话', '特殊安排确认'] }),
-      mk({ id: 'o6', seq: '01', status: 'confirmed', date: addDays(t, 2), time: '18:00', partySize: 8, roomId: 'r3', customerId: 'c6', customerName: '周先生', occasion: '结婚纪念日', dishNames: ['生腌虾菇', '闽东鱼干三拼', '原汁目鱼', '干煎黄鱼鲞', '绿笋炒嫩姜', '半酒炖蛏', '土鲍炒荠菜梗', '蒸大口鱼', '海鲜炒地瓜粉扣', '时令果盘'], dietary: [], special: '鲜花布置，安静包厢', budget: 2200, budgetMode: 'table', createdBy: '老板', audit: { confirmedAt: nowISO() } }),
-      mk({ id: 'o7', seq: '01', status: 'done', date: addDays(t, -1), time: '18:00', partySize: 10, roomId: 'r1', customerId: 'c1', customerName: '王总', occasion: '老友聚餐', dishNames: ['生腌虾菇', '原汁目鱼', '美人鱼炒姜', '蒸大口鱼', '绿笋炒嫩姜', '半酒炖蛏', '海鲜炒米粉', '时令果盘'], dietary: [], special: '', budget: 3880, budgetMode: 'table', createdBy: '店长', audit: { confirmedAt: addDays(t, -2) + 'T10:00:00.000Z', notifiedAt: addDays(t, -2) + 'T10:00:00.000Z', doneAt: nowISO() } }),
-      mk({ id: 'o8', seq: '02', status: 'done', date: addDays(t, -1), time: '19:00', partySize: 6, roomId: 'r2', customerId: 'c2', customerName: '林女士', occasion: '朋友小聚', dishNames: ['绿笋炒嫩姜', '时令时蔬', '蒜蓉时蔬', '畲族乌米饭', '时令果盘'], dietary: ['素食'], special: '', budget: 2000, budgetMode: 'table', createdBy: '老板', audit: { confirmedAt: addDays(t, -3) + 'T10:00:00.000Z', notifiedAt: addDays(t, -3) + 'T10:00:00.000Z', doneAt: nowISO() } }),
-      mk({ id: 'o9', seq: '01', status: 'done', date: addDays(t, -7), time: '18:30', partySize: 6, roomId: 'r1', customerId: 'c1', customerName: '王总', occasion: '家宴', dishNames: ['生腌虾菇', '原汁目鱼', '美人鱼炒姜', '蒸大口鱼', '绿笋炒嫩姜', '半酒炖蛏', '海鲜炒米粉', '时令果盘'], dietary: [], special: '', budget: 2800, budgetMode: 'table', createdBy: '老板', audit: { confirmedAt: addDays(t, -8) + 'T10:00:00.000Z', notifiedAt: addDays(t, -8) + 'T10:00:00.000Z', doneAt: nowISO() } }),
-      mk({ id: 'o10', seq: '02', status: 'done', date: addDays(t, -7), time: '19:00', partySize: 10, roomId: 'r3', customerId: 'c3', customerName: '张总', occasion: '商务接待', dishNames: ['焖河豚', '荷叶蒸鳗鱼', '目鱼蛋鸡腰生蚝半酒炖', '醉排骨', '生腌小白虾', '闽东鱼干三拼', '土鲍炒荠菜梗', '爆炒猪腰', '海鲜炒米粉', '时令果盘'], dietary: ['不吃辣'], special: '', budget: 4200, budgetMode: 'table', createdBy: '店长', audit: { confirmedAt: addDays(t, -8) + 'T10:00:00.000Z', notifiedAt: addDays(t, -8) + 'T10:00:00.000Z', doneAt: nowISO() } }),
-      mk({ id: 'o11', seq: '01', status: 'pending', date: addDays(t, 7), time: '18:00', partySize: 10, roomId: 'r2', customerId: 'c4', customerName: '陈先生', occasion: '公司聚餐', dishNames: ['醉排骨', '炒麦螺', '蒸大口鱼', '五花肉炒笋干', '绿笋炒嫩姜', '海竹酸辣汤', '海鲜炒地瓜粉扣', '时令果盘'], dietary: [], special: '', budget: 3500, budgetMode: 'table', createdBy: '老板', missing: ['忌口确认', '时令菜确认', '特殊安排确认'] })
-    ];
-    orders.forEach((o) => { o.updatedAt = nowISO(); });
-    S.orders = orders;
-    S.rsvps = [{
-      id: 'rs1', orderId: 'o2', inviteCode: 'INV-WANG88', guestName: '王太太',
-      phone: '', attend: true, dietary: ['不吃香菜'], partySize: 1, submittedAt: nowISO(), source: 'invite'
-    }];
-    S.meta.onboarded = true;
-    S.meta.seeded = true;
-    S.meta.rev = 1;
-    S.meta.updatedAt = nowISO();
-    return S;
-  }
 
   /* ---------- 熟客匹配 ---------- */
+  function phoneTail(phone) {
+    const d = String(phone || '').replace(/\D/g, '');
+    return d.length >= 4 ? d.slice(-4) : '';
+  }
+  // 同名客人不能合并：手机尾号不同就是两个人
   function findCustomer(S, opts) {
     const phone = String((opts && opts.phone) || '').replace(/\s/g, '');
     const wechat = String((opts && opts.wechat) || '').trim().toLowerCase();
@@ -259,10 +219,22 @@
       if (c) return c;
     }
     if (name) {
-      const c = list.find((x) => x.name === name || (x.aliases || []).includes(name));
-      if (c) return c;
-      const c2 = list.find((x) => (x.name.indexOf(name) >= 0 || name.indexOf(x.name) >= 0) && name.length >= 2);
-      if (c2) return c2;
+      // 带了手机号时，名字相同但手机号不同的，视为另一位客人（避免把同姓两位合成一个档案）
+      const phoneOk = (x) => !phone || !x.phone || String(x.phone).replace(/\s/g, '') === phone;
+      const exact = list.filter((x) => (x.name === name || (x.aliases || []).includes(name)) && phoneOk(x));
+      if (exact.length === 1) return exact[0];
+      if (exact.length > 1) {
+        // 同名的有多位：只有手机尾号能对上才算同一人，否则按新客建档
+        const tail = phoneTail(phone);
+        if (tail) return exact.find((x) => phoneTail(x.phone) === tail) || null;
+        return null;
+      }
+      const fuzzy = list.filter((x) => (x.name.indexOf(name) >= 0 || name.indexOf(x.name) >= 0) && name.length >= 2 && phoneOk(x));
+      if (fuzzy.length === 1) return fuzzy[0];
+      if (fuzzy.length > 1) {
+        const tail = phoneTail(phone);
+        return tail ? (fuzzy.find((x) => phoneTail(x.phone) === tail) || null) : null;
+      }
     }
     return null;
   }
@@ -676,6 +648,24 @@
     const r = (S.rooms || []).find((x) => x.id === id);
     return r ? r.name : '';
   }
+  function classicDishes(S, limit) {
+    return (S.dishes || [])
+      .filter((d) => d && !d.deleted && d.classic && d.status !== 'off')
+      .sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0))
+      .slice(0, limit || 4)
+      .map((d) => ({ name: d.name, note: d.note || '' }));
+  }
+  // 高德地图导航：有经纬度用标点，否则用店名 + 地址搜索
+  function navUrlOf(settings) {
+    const s = settings || {};
+    if (s.lat && s.lng) {
+      return 'https://uri.amap.com/marker?position=' + encodeURIComponent(s.lng + ',' + s.lat) + '&name=' + encodeURIComponent(s.shopName || '长季鲜') + '&callnative=1&src=changjixian';
+    }
+    if (s.address) {
+      return 'https://uri.amap.com/search?keyword=' + encodeURIComponent((s.shopName || '') + ' ' + s.address) + '&callnative=1&src=changjixian';
+    }
+    return '';
+  }
   function dishByName(S, name) {
     return (S.dishes || []).find((d) => d.name === name);
   }
@@ -683,8 +673,9 @@
   global.CJXData = {
     APP_VERSION, CATEGORIES, DIET_OPTIONS, SPECIAL_OPTIONS, TASTE_OPTIONS,
     uid, nowISO, todayStr, addDays, dayDiff, fmtDateCN, weekdayCN, relativeDay, money, timeText, pad,
-    defaultState, defaultDishes, defaultRooms, defaultSettings, seedDemo,
+    defaultState, defaultDishes, defaultRooms, defaultSettings,
     findCustomer, favDishesOf, learnCustomer, dishObjs, dishByName, roomName,
+    phoneTail, roomCap, roomCapText, classicDishes, navUrlOf,
     parseChat, budgetTotalOf, generateMenus, orderTotal, eligibleDishes, dietExcludes
   };
 })(window);

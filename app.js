@@ -7,12 +7,21 @@
   const LS_STATE = 'cjx_state_v1';
   const LS_SNAPS = 'cjx_snaps_v1';
   const LS_SESSION = 'cjx_session_v1';
+  const LS_CURSOR = 'cjx_sync_cursor_v1';   // 增量同步游标（本机）
 
   const ROLES = {
-    boss: { name: '老板', desc: '看全局、接预定', icon: 'crown' },
-    manager: { name: '店长', desc: '审核、排期、备货', icon: 'clipboard' },
-    kitchen: { name: '后厨', desc: '时令菜、备货单', icon: 'dish' },
-    service: { name: '服务员', desc: '今日看板、忌口提醒', icon: 'bell' }
+    boss: { name: '老板', desc: '接单、审核、菜单、邀请函', icon: 'crown' },
+    manager: { name: '店长', desc: '上下架、配菜、备货、邀请函', icon: 'clipboard' },
+    kitchen: { name: '后厨', desc: '看时令菜、看备货单', icon: 'dish' },
+    service: { name: '服务员', desc: '看板、包厢开台准备', icon: 'bell' }
+  };
+  // 权限矩阵：老板 / 店长可改菜单、上下架、AI 配菜；后厨与服务员只读
+  // 菜价只有店长能改：老板能改菜名/做法/上下架，但价格字段锁定
+  const PERMS = {
+    boss: { menuEdit: true, menuShelf: true, menuPrice: false, aiMenu: true, prepView: true, prepManage: true, orderManage: true, invite: true, roleQr: true },
+    manager: { menuEdit: true, menuShelf: true, menuPrice: true, aiMenu: true, prepView: true, prepManage: true, orderManage: true, invite: true, roleQr: true },
+    kitchen: { menuEdit: false, menuShelf: false, menuPrice: false, aiMenu: false, prepView: true, prepManage: false, orderManage: false, invite: false, roleQr: false },
+    service: { menuEdit: false, menuShelf: false, menuPrice: false, aiMenu: false, prepView: false, prepManage: false, orderManage: false, invite: false, roleQr: false }
   };
   const TABS = {
     boss: [['home', '首页', 'home'], ['orders', '预定', 'list'], ['calendar', '日历', 'calendar'], ['customers', '熟客', 'users'], ['more', '更多', 'more']],
@@ -28,10 +37,21 @@
     done: { label: '已完成', cls: 'done' },
     cancelled: { label: '已取消', cls: 'cancelled' }
   };
+  // 开台准备：按人数自动算量，服务员照单备
   const SERVICE_CHECKS = [
-    { key: 'tableware', label: '碗碟' },
-    { key: 'pitcher', label: '酒水扎壶' },
-    { key: 'water', label: '矿泉水' }
+    { key: 'tableware', label: '碗碟', unit: '套', calc: (n) => n + 2, hint: '按人数 +2 套备用' },
+    { key: 'pitcher', label: '酒水扎壶', unit: '个', calc: (n) => Math.max(1, Math.ceil(n / 4)), hint: '每 4 人 1 个' },
+    { key: 'water', label: '矿泉水', unit: '瓶', calc: (n) => Math.max(2, Math.ceil(n / 2)), hint: '每 2 人 1 瓶' },
+    { key: 'drink', label: '饮料', unit: '瓶', calc: (n) => Math.max(1, Math.ceil(n / 3)), hint: '每 3 人 1 瓶' }
+  ];
+  // 菜单流转：接单 → 转店长 → 出菜单 → 转老板 → 发客户 → 客户确认 → 邀请函
+  const FLOW_STEPS = [
+    { key: 'new', label: '接单', desc: '老板录入客人预定' },
+    { key: 'manager', label: '转店长', desc: '店长按人数餐标配菜' },
+    { key: 'menu', label: '出菜单', desc: 'AI 生成本桌菜单' },
+    { key: 'boss', label: '转老板', desc: '老板核对后发客户' },
+    { key: 'customer', label: '发客户', desc: '客户确认是否改菜' },
+    { key: 'confirmed', label: '已确认', desc: '可发邀请函' }
   ];
 
   /* ---------- SVG 图标 ---------- */
@@ -142,6 +162,30 @@
   if (!session) ui.view = 'gate';
   else ui.view = session.role === 'service' ? 'board' : (session.role === 'kitchen' ? 'dishes' : 'home');
 
+  /* ---------- 示例数据（按需加载：demo.js 不进首屏） ---------- */
+  const ASSET_VER = String(D.APP_VERSION || '1');
+  let demoPromise = null;
+  function loadDemoScript() {
+    if (window.CJXDemo && window.CJXDemo.seedDemo) return Promise.resolve();
+    if (demoPromise) return demoPromise;
+    demoPromise = new Promise(function (resolve, reject) {
+      const s = document.createElement('script');
+      s.src = 'demo.js?v=' + ASSET_VER;
+      s.async = true;
+      s.onload = function () {
+        if (window.CJXDemo && window.CJXDemo.seedDemo) resolve();
+        else { demoPromise = null; reject(new Error('示例数据文件内容异常')); }
+      };
+      s.onerror = function () { demoPromise = null; reject(new Error('示例数据加载失败')); };
+      document.head.appendChild(s);
+    });
+    return demoPromise;
+  }
+  function seedDemo(S) {
+    if (window.CJXDemo && window.CJXDemo.seedDemo) { window.CJXDemo.seedDemo(S); return true; }
+    return false;
+  }
+
   function loadState() {
     let s = null;
     try {
@@ -158,14 +202,26 @@
     if (!s.settings.cuisine) s.settings.cuisine = '福安菜 × 厦门海鲜';
     delete s.settings.mealFocus;
     s.rooms = Array.isArray(s.rooms) ? s.rooms : D.defaultRooms();
+    // 包厢容量迁移：VIP1/VIP2 → 10–12 人，VIP3 → 15–18 人；自定义包厢按原座位数兜底
+    s.rooms.forEach((r) => {
+      if (!r) return;
+      const name = String(r.name || '');
+      if (r.maxSeats == null || r.minSeats == null) {
+        if (/^VIP\s*1$/i.test(name) || /^VIP\s*2$/i.test(name)) { r.minSeats = r.minSeats || 10; r.maxSeats = r.maxSeats || 12; }
+        else if (/^VIP\s*3$/i.test(name)) { r.minSeats = r.minSeats || 15; r.maxSeats = r.maxSeats || 18; }
+        else { r.maxSeats = r.maxSeats || Number(r.seats) || 10; r.minSeats = r.minSeats || Math.max(1, r.maxSeats - 2); }
+      }
+      r.seats = Number(r.maxSeats) || Number(r.seats) || 10;
+    });
     s.dishes = Array.isArray(s.dishes) ? s.dishes : D.defaultDishes();
     s.customers = Array.isArray(s.customers) ? s.customers : [];
     s.orders = Array.isArray(s.orders) ? s.orders : [];
     s.orders.forEach((o) => {
-      o.serviceChecks = Object.assign({ tableware: false, pitcher: false, water: false }, o.serviceChecks || {});
+      o.serviceChecks = Object.assign({ tableware: false, pitcher: false, water: false, drink: false }, o.serviceChecks || {});
+      if (!o.flow && (o.dishes || []).length) o.flow = { stage: (o.inviteCode || o.status === 'done') ? 'confirmed' : 'menu', at: o.updatedAt || D.nowISO(), by: '系统迁移', history: [] };
     });
     s.rsvps = Array.isArray(s.rsvps) ? s.rsvps : [];
-    s.meta.schemaVersion = 2;
+    s.meta.schemaVersion = 3;
     return s;
   }
   function loadSession() {
@@ -177,14 +233,30 @@
   function snapshots() {
     try { return JSON.parse(localStorage.getItem(LS_SNAPS) || '[]'); } catch (e) { return []; }
   }
+  /* 快照只保留可恢复的数据，剔掉 _dirty 这类运行时标记，避免体积和噪音 */
+  function snapshotState() {
+    return JSON.parse(JSON.stringify(S, function (k, v) {
+      if (k === '_dirty' || k === 'settingsDirty') return undefined;
+      return v;
+    }));
+  }
+  const SNAP_MIN_GAP = 120000; // 自动快照最小间隔：2 分钟（关键动作可用 snap:true 强制）
+  let lastSnapAt = 0;
   function saveState(opts) {
     opts = opts || {};
     if (!opts.noRev) { S.meta.rev = (S.meta.rev || 0) + 1; S.meta.updatedAt = D.nowISO(); }
-    if (!opts.noSnap) {
+    const wantSnap = !opts.noSnap && (opts.snap === true || Date.now() - lastSnapAt >= SNAP_MIN_GAP);
+    if (wantSnap) {
       const snaps = snapshots();
-      snaps.push({ at: D.nowISO(), rev: S.meta.rev, state: JSON.parse(JSON.stringify(S)) });
+      snaps.push({ at: D.nowISO(), rev: S.meta.rev, state: snapshotState() });
       while (snaps.length > 10) snaps.shift();
-      try { localStorage.setItem(LS_SNAPS, JSON.stringify(snaps)); } catch (e) { }
+      try {
+        localStorage.setItem(LS_SNAPS, JSON.stringify(snaps));
+        lastSnapAt = Date.now();
+      } catch (e) {
+        // 空间不足时只留最近 4 份，保证还有得恢复
+        try { localStorage.setItem(LS_SNAPS, JSON.stringify(snaps.slice(-4))); lastSnapAt = Date.now(); } catch (e2) { }
+      }
     }
     try { localStorage.setItem(LS_STATE, JSON.stringify(S)); } catch (e) { toast('本地存储空间不足'); }
     if (!opts.noPush) schedulePush();
@@ -199,19 +271,30 @@
     clearTimeout(pushTimer);
     pushTimer = setTimeout(() => { pushDirty(false); }, 900);
   }
+  // 包厢人数区间存在 note（JSON）里，旧云端表不用改结构也能同步
+  function roomNoteOf(r) {
+    return JSON.stringify({ min: Number(r.minSeats) || 0, max: Number(r.maxSeats) || Number(r.seats) || 0 });
+  }
+  function roomCapFromNote(note, seats) {
+    try {
+      const o = JSON.parse(String(note || ''));
+      if (o && typeof o === 'object' && (o.min || o.max)) return { min: Number(o.min) || 0, max: Number(o.max) || Number(seats) || 0 };
+    } catch (e) { }
+    return { min: 0, max: Number(seats) || 0 };
+  }
   function toDb(type, o) {
-    if (type === 'rooms') return { id: o.id, name: o.name, seats: o.seats || 0, sort: o.sort || 0, enabled: o.enabled !== false, note: o.note || '', updated_at: o.updatedAt, deleted: !!o.deleted };
+    if (type === 'rooms') return { id: o.id, name: o.name, seats: Number(o.maxSeats) || Number(o.seats) || 0, sort: o.sort || 0, enabled: o.enabled !== false, note: roomNoteOf(o), updated_at: o.updatedAt, deleted: !!o.deleted };
     if (type === 'dishes') return { id: o.id, name: o.name, category: o.category, price: Number(o.price) || 0, status: o.status, lead_days: Number(o.leadDays) || 0, tags: o.tags || [], flavor: o.flavor || [], note: o.note || '', updated_at: o.updatedAt, deleted: !!o.deleted };
     if (type === 'customers') return { id: o.id, name: o.name, aliases: o.aliases || [], wechat: o.wechat || '', phone: o.phone || '', tags: o.tags || [], dietary: o.dietary || [], taste_tags: o.tasteTags || [], taste_scores: o.tasteScores || {}, dish_counts: o.dishCounts || {}, pref_room: o.prefRoom || '', notes: o.notes || '', visit_count: Number(o.visitCount) || 0, last_visit: o.lastVisit || null, budget_pref: o.budgetPref || null, budget_mode: o.budgetMode || 'table', updated_at: o.updatedAt, deleted: !!o.deleted };
-    if (type === 'orders') return { id: o.id, code: o.code, status: o.status, date: o.date, time: o.time, party_size: Number(o.partySize) || 0, room_id: o.roomId || '', customer_id: o.customerId || '', customer_name: o.customerName || '', phone: o.phone || '', wechat: o.wechat || '', occasion: o.occasion || '', dishes: o.dishes || [], dietary: o.dietary || [], taste_hints: o.tasteHints || [], special: o.special || '', host_name: o.hostName || '', notes: o.notes || '', budget: o.budget || null, budget_mode: o.budgetMode || 'table', menu_source: o.menuSource || 'manual', guests: o.guests || [], service_checks: o.serviceChecks || {}, invite_code: o.inviteCode || '', invite_at: o.inviteAt || null, missing: o.missing || [], change_log: o.changeLog || [], audit: o.audit || {}, change_pending: !!o.changePending, updated_at: o.updatedAt, deleted: !!o.deleted };
+    if (type === 'orders') return { id: o.id, code: o.code, status: o.status, date: o.date, time: o.time, party_size: Number(o.partySize) || 0, room_id: o.roomId || '', customer_id: o.customerId || '', customer_name: o.customerName || '', phone: o.phone || '', wechat: o.wechat || '', occasion: o.occasion || '', dishes: o.dishes || [], dietary: o.dietary || [], taste_hints: o.tasteHints || [], special: o.special || '', host_name: o.hostName || '', notes: o.notes || '', budget: o.budget || null, budget_mode: o.budgetMode || 'table', menu_source: o.menuSource || 'manual', guests: o.guests || [], service_checks: o.serviceChecks || {}, invite_code: o.inviteCode || '', invite_at: o.inviteAt || null, missing: o.missing || [], change_log: o.changeLog || [], audit: Object.assign({}, o.audit || {}, { flow: o.flow || null, menuConfirmed: !!o.menuConfirmed, menuConfirmedAt: o.menuConfirmedAt || null }), change_pending: !!o.changePending, updated_at: o.updatedAt, deleted: !!o.deleted };
     if (type === 'rsvps') return { id: o.id, order_id: o.orderId, invite_code: o.inviteCode || '', guest_name: o.guestName || '', phone: o.phone || '', attend: o.attend !== false, dietary: o.dietary || [], party_size: Number(o.partySize) || 1, submitted_at: o.submittedAt || D.nowISO(), source: o.source || 'invite' };
     return o;
   }
   function fromDb(type, r) {
-    if (type === 'rooms') return { id: r.id, name: r.name, seats: r.seats, sort: r.sort, enabled: r.enabled, note: r.note || '', updatedAt: r.updated_at, deleted: !!r.deleted, _dirty: false };
+    if (type === 'rooms') { const cap = roomCapFromNote(r.note, r.seats); return { id: r.id, name: r.name, seats: cap.max || r.seats, minSeats: cap.min, maxSeats: cap.max || r.seats, sort: r.sort, enabled: r.enabled, note: '', updatedAt: r.updated_at, deleted: !!r.deleted, _dirty: false }; }
     if (type === 'dishes') return { id: r.id, name: r.name, category: r.category, price: Number(r.price) || 0, status: r.status, leadDays: r.lead_days || 0, tags: r.tags || [], flavor: r.flavor || [], note: r.note || '', updatedAt: r.updated_at, deleted: !!r.deleted, _dirty: false };
     if (type === 'customers') return { id: r.id, name: r.name, aliases: r.aliases || [], wechat: r.wechat || '', phone: r.phone || '', tags: r.tags || [], dietary: r.dietary || [], tasteTags: r.taste_tags || [], tasteScores: r.taste_scores || {}, dishCounts: r.dish_counts || {}, prefRoom: r.pref_room || '', notes: r.notes || '', visitCount: r.visit_count || 0, lastVisit: r.last_visit || '', budgetPref: r.budget_pref || null, budgetMode: r.budget_mode || 'table', updatedAt: r.updated_at, deleted: !!r.deleted, _dirty: false };
-    if (type === 'orders') return { id: r.id, code: r.code, status: r.status, date: r.date, time: r.time, partySize: r.party_size, roomId: r.room_id || '', customerId: r.customer_id || '', customerName: r.customer_name || '', phone: r.phone || '', wechat: r.wechat || '', occasion: r.occasion || '', dishes: r.dishes || [], dietary: r.dietary || [], tasteHints: r.taste_hints || [], special: r.special || '', hostName: r.host_name || '', notes: r.notes || '', budget: r.budget || null, budgetMode: r.budget_mode || 'table', menuSource: r.menu_source || 'manual', guests: r.guests || [], serviceChecks: Object.assign({ tableware: false, pitcher: false, water: false }, r.service_checks || {}), inviteCode: r.invite_code || '', inviteAt: r.invite_at || '', missing: r.missing || [], changeLog: r.change_log || [], audit: r.audit || {}, changePending: !!r.change_pending, updatedAt: r.updated_at, deleted: !!r.deleted, _dirty: false };
+    if (type === 'orders') return { id: r.id, code: r.code, status: r.status, date: r.date, time: r.time, partySize: r.party_size, roomId: r.room_id || '', customerId: r.customer_id || '', customerName: r.customer_name || '', phone: r.phone || '', wechat: r.wechat || '', occasion: r.occasion || '', dishes: r.dishes || [], dietary: r.dietary || [], tasteHints: r.taste_hints || [], special: r.special || '', hostName: r.host_name || '', notes: r.notes || '', budget: r.budget || null, budgetMode: r.budget_mode || 'table', menuSource: r.menu_source || 'manual', guests: r.guests || [], serviceChecks: Object.assign({ tableware: false, pitcher: false, water: false, drink: false }, r.service_checks || {}), inviteCode: r.invite_code || '', inviteAt: r.invite_at || '', missing: r.missing || [], changeLog: r.change_log || [], audit: r.audit || {}, flow: (r.audit || {}).flow || null, menuConfirmed: !!(r.audit || {}).menuConfirmed, menuConfirmedAt: (r.audit || {}).menuConfirmedAt || '', changePending: !!r.change_pending, updatedAt: r.updated_at, deleted: !!r.deleted, _dirty: false };
     if (type === 'rsvps') return { id: r.id, orderId: r.order_id, inviteCode: r.invite_code || '', guestName: r.guest_name || '', phone: r.phone || '', attend: r.attend !== false, dietary: r.dietary || [], partySize: r.party_size || 1, submittedAt: r.submitted_at, source: r.source || 'invite' };
     return r;
   }
@@ -298,23 +381,40 @@
     S.meta.settingsDirty = true;
     S.meta.settingsUpdatedAt = D.nowISO();
   }
+  /* 增量同步游标：记录上次拉到的 updated_at，避免每 22 秒全表重拉 */
+  let pullCursor = (function () { try { return localStorage.getItem(LS_CURSOR) || ''; } catch (e) { return ''; } })();
+  let pullRounds = 0;
+  const FULL_PULL_EVERY = 30;   // 每 30 轮（约 11 分钟）全量兜底一次，防止设备时钟偏差漏行
+  function resetPullCursor() {
+    pullCursor = ''; pullRounds = 0;
+    try { localStorage.removeItem(LS_CURSOR); } catch (e) { }
+  }
   async function syncPull(manual) {
     if (!syncReady()) { if (manual) toast('请先在设置里登录同步账号'); return; }
     if (ui.busy) return;
     ui.busy = true;
     try {
-      const data = await window.CJXSync.pullAll();
+      // 增量拉取：只取上次之后有变动的行；没有游标、或到兜底轮次时才全量
+      pullRounds++;
+      const fullPull = !pullCursor || pullRounds % FULL_PULL_EVERY === 0;
+      const data = await window.CJXSync.pullAll(fullPull ? null : { since: pullCursor, overlap: manual ? 600 : 300 });
       mergeRemote(data);
-      // 远端缺哪张表，就把本机对应的数据补上去（首次登录时尤其重要）
-      ['rooms', 'dishes', 'customers', 'orders'].forEach((t) => {
-        if (!(data[t] || []).length) (S[t] || []).forEach((o) => { o._dirty = true; });
-      });
-      if (!(data.settings || []).length) { S.meta.settingsDirty = true; S.meta.settingsUpdatedAt = D.nowISO(); }
+      if (data._cursor) {
+        pullCursor = data._cursor;
+        try { localStorage.setItem(LS_CURSOR, pullCursor); } catch (e) { }
+      }
+      // 只有全量拉取时，"远端为空"才代表需要把本机数据补上去（首次登录尤其重要）
+      if (fullPull) {
+        ['rooms', 'dishes', 'customers', 'orders'].forEach((t) => {
+          if (!(data[t] || []).length) (S[t] || []).forEach((o) => { o._dirty = true; });
+        });
+        if (!(data.settings || []).length) { S.meta.settingsDirty = true; S.meta.settingsUpdatedAt = D.nowISO(); }
+      }
       S.meta.lastSyncedAt = D.nowISO();
       ui.lastSyncAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
       await pushDirty(false, true);
       saveState({ noPush: true, noSnap: true, noRev: true });
-      if (manual) toast('已同步');
+      if (manual) toast(fullPull ? '已同步（全量）' : '已同步');
       refreshCurrent();
     } catch (e) {
       toast('同步失败：' + e.message);
@@ -324,6 +424,74 @@
   /* ---------- 通用查询 ---------- */
   function roomName(id) { return D.roomName(S, id); }
   function enabledRooms() { return alive(S.rooms).filter((r) => r.enabled !== false).sort((a, b) => (a.sort || 0) - (b.sort || 0)); }
+  function can(cap) { const p = PERMS[session && session.role]; return !!(p && p[cap]); }
+  function roomCapText(r) { return D.roomCapText(r); }
+  function roomOccupied(roomId, date, time, excludeId) {
+    return alive(S.orders).find((o) => o.id !== excludeId && o.roomId === roomId && o.date === date &&
+      ['pending', 'confirmed', 'notified'].includes(o.status) && Math.abs(toMinutes(o.time) - toMinutes(time)) < 150);
+  }
+  function roomOptions(date, time, party, excludeId) {
+    const n = Number(party) || 0;
+    return enabledRooms().map((r) => {
+      const cap = D.roomCap(r);
+      const conflict = roomOccupied(r.id, date, time, excludeId);
+      let fit = 'ok';
+      if (cap.max && n > cap.max) fit = 'small';        // 坐不下
+      else if (cap.min && n < cap.min) fit = 'big';     // 偏大
+      return { room: r, cap, fit, conflict: conflict ? (conflict.customerName || '已有预定') : '' };
+    });
+  }
+  // AI 配菜时自动选包厢：优先「刚好坐得下、且不冲突」的最小包厢
+  function suggestRoom(date, time, party, excludeId) {
+    const opts = roomOptions(date, time, party, excludeId).filter((x) => !x.conflict);
+    const ok = opts.filter((x) => x.fit === 'ok').sort((a, b) => a.cap.max - b.cap.max);
+    if (ok.length) return { room: ok[0].room, reason: '刚好合适（' + roomCapText(ok[0].room) + '）', overflow: false };
+    const big = opts.filter((x) => x.fit === 'big').sort((a, b) => a.cap.max - b.cap.max);
+    if (big.length) return { room: big[0].room, reason: '略大但可用（' + roomCapText(big[0].room) + '）', overflow: false };
+    const maxRoom = enabledRooms().map((r) => D.roomCap(r).max).sort((a, b) => b - a)[0] || 0;
+    return { room: null, reason: Number(party) > maxRoom ? '超过最大包厢 ' + maxRoom + ' 人，建议拆两桌或加位' : '当天该时段包厢已被占用', overflow: Number(party) > maxRoom };
+  }
+  function orderName(o) {
+    const name = (o && o.customerName) || '未称呼';
+    const tail = D.phoneTail(o && o.phone);
+    if (!tail) return name;
+    const first = name.slice(0, 1);
+    const conflict = alive(S.orders).some((x) => x.id !== o.id && (x.customerName || '').slice(0, 1) === first &&
+      D.phoneTail(x.phone) && D.phoneTail(x.phone) !== tail) ||
+      alive(S.customers).some((c) => (c.name || '').slice(0, 1) === first && D.phoneTail(c.phone) && D.phoneTail(c.phone) !== tail);
+    return conflict ? name + '（尾' + tail + '）' : name;
+  }
+  function custLabel(c) {
+    if (!c) return '';
+    const tail = D.phoneTail(c.phone);
+    if (!tail) return c.name;
+    const first = (c.name || '').slice(0, 1);
+    const conflict = alive(S.customers).some((x) => x.id !== c.id && (x.name || '').slice(0, 1) === first && D.phoneTail(x.phone) && D.phoneTail(x.phone) !== tail);
+    return conflict ? c.name + '（尾' + tail + '）' : c.name;
+  }
+  function orderFlow(o) {
+    const stage = o && o.flow && o.flow.stage;
+    if (stage && FLOW_STEPS.some((s) => s.key === stage)) return stage;
+    if (!o) return 'new';
+    if (o.menuConfirmed || o.inviteCode) return 'confirmed';
+    if ((o.dishes || []).length) return 'menu';
+    return 'new';
+  }
+  function setFlow(o, stage, note) {
+    o.flow = o.flow || { stage: 'new', history: [] };
+    o.flow.stage = stage;
+    o.flow.at = D.nowISO();
+    o.flow.by = roleName();
+    o.flow.history = o.flow.history || [];
+    o.flow.history.push({ at: o.flow.at, by: roleName(), stage, note: note || '' });
+    const step = FLOW_STEPS.find((s) => s.key === stage);
+    if (step) addLog(o, '流程：' + step.label + (note ? '（' + note + '）' : ''));
+    touch(o);
+  }
+  function servicePrepItems(o) {
+    const n = Number(o.partySize) || 0;
+    return SERVICE_CHECKS.map((k) => ({ key: k.key, label: k.label, unit: k.unit, qty: k.calc(n), hint: k.hint }));
+  }
   function orderCustomer(o) {
     if (!o) return null;
     if (o.customerId) { const c = (S.customers || []).find((x) => x.id === o.customerId && !x.deleted); if (c) return c; }
@@ -359,12 +527,19 @@
   function serviceCheckHtml(o, compact, noHead) {
     const st = serviceCheckState(o);
     const editable = ['service', 'boss', 'manager'].includes(session.role) && ['confirmed', 'notified', 'done'].includes(o.status);
-    return '<div class="svc-row ' + (compact ? 'compact' : '') + '">' + (noHead ? '' : '<div class="svc-head"><span>开台准备</span><b class="' + (st.done === st.total ? 'all' : '') + '">' + st.done + '/' + st.total + '</b></div>') + '<div class="svc-items">' +
-      SERVICE_CHECKS.map((k) => {
+    const items = servicePrepItems(o);
+    return '<div class="svc-row ' + (compact ? 'compact' : '') + '">' + (noHead ? '' : '<div class="svc-head"><span>开台准备 · ' + (o.partySize || 0) + ' 人</span><b class="' + (st.done === st.total ? 'all' : '') + '">' + st.done + '/' + st.total + '</b></div>') + '<div class="svc-items">' +
+      items.map((k) => {
         const on = !!st.checks[k.key];
-        if (!editable) return '<span class="svc-btn ' + (on ? 'on' : '') + '"><span class="sc-box">' + (on ? '✓' : '') + '</span>' + k.label + '</span>';
-        return '<button type="button" class="svc-btn ' + (on ? 'on' : '') + '" data-act="toggle-service-check" data-id="' + o.id + '" data-key="' + k.key + '"><span class="sc-box">' + (on ? '✓' : '') + '</span>' + k.label + '</button>';
+        const inner = '<span class="sc-box">' + (on ? '✓' : '') + '</span>' + k.label + '<b class="svc-qty">' + k.qty + '</b><span class="svc-unit">' + k.unit + '</span>';
+        if (!editable) return '<span class="svc-btn ' + (on ? 'on' : '') + '" title="' + esc(k.hint) + '">' + inner + '</span>';
+        return '<button type="button" class="svc-btn ' + (on ? 'on' : '') + '" data-act="toggle-service-check" data-id="' + o.id + '" data-key="' + k.key + '" title="' + esc(k.hint) + '">' + inner + '</button>';
       }).join('') + '</div></div>';
+  }
+  function servicePrepText(o, compact) {
+    const room = roomName(o.roomId) || '包厢待定';
+    const head = (compact ? '' : S.settings.shopName + ' · ' + D.fmtDateCN(o.date) + ' ') + o.time + ' ' + room + ' · ' + (o.partySize || '?') + ' 位';
+    return [head, ...servicePrepItems(o).map((k) => '· ' + k.label + ' ' + k.qty + ' ' + k.unit)].join('\n');
   }
 
   /* ---------- 视图渲染 ---------- */
@@ -499,6 +674,14 @@
     const pending = alive(S.orders).filter((o) => o.status === 'pending').sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     const tomorrow = alive(S.orders).filter((o) => o.date === D.addDays(t, 1) && o.status !== 'cancelled').sort((a, b) => a.time.localeCompare(b.time));
     const vipOrders = todayOrders.filter((o) => { const c = orderCustomer(o); return c && (c.tags || []).some((x) => /VIP|老友/i.test(x)); });
+    // 流程待办：老板 → 店长配菜；店长 → 出菜单；老板 → 发客户
+    const todo = alive(S.orders).filter((o) => ['pending', 'confirmed', 'notified'].includes(o.status)).filter((o) => {
+      const st = orderFlow(o);
+      if (session.role === 'manager') return st === 'manager';
+      if (session.role === 'boss') return st === 'boss';
+      return false;
+    }).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+    const todoLabel = session.role === 'manager' ? '待我配菜' : '待我发客户';
     return '<div class="hero"><div class="hero-date">' + D.fmtDateCN(t) + ' · ' + D.weekdayCN(t) + ' · ' + esc(S.settings.cuisine || '') + '</div>' +
       '<h2>' + nowGreeting() + '，' + esc(roleName()) + '</h2><p>' + (todayOrders.length ? '今天有 ' + todayOrders.length + ' 桌客人，忙而不乱。' : '今天还没有预定，先把客人接住。') + '</p>' +
       '<div class="hero-stats">' +
@@ -515,14 +698,17 @@
       (vipOrders.length ? '<div class="section"><div class="notice"><b>今天有熟客到店</b><br>' + vipOrders.slice(0, 3).map((o) => {
         const c = orderCustomer(o);
         const favs = c ? customerFavs(c).map((x) => x.name).slice(0, 2).join('、') : '';
-        return esc(o.time) + ' ' + esc(o.customerName) + '（' + esc(roomName(o.roomId)) + '）' + (c && c.tags.length ? ' · ' + esc(c.tags.join('/')) : '') + (favs ? ' · 常点：' + esc(favs) : '');
+        return esc(o.time) + ' ' + esc(orderName(o)) + '（' + esc(roomName(o.roomId)) + '）' + (c && c.tags.length ? ' · ' + esc(c.tags.join('/')) : '') + (favs ? ' · 常点：' + esc(favs) : '');
       }).join('<br>') + '</div></div>' : '') +
+      (todo.length ? '<div class="section"><div class="sec-head"><div class="sec-title">' + todoLabel + ' · ' + todo.length + '</div></div><div class="list">' +
+        todo.map((o) => '<button class="list-row" data-act="open-order" data-id="' + o.id + '"><div class="lr-ico gold">' + I.spark + '</div><div class="lr-main"><div class="lr-title">' + esc(orderName(o)) + ' · ' + (o.partySize || '?') + ' 位 · ' + esc(D.relativeDay(o.date)) + ' ' + esc(o.time) + '</div><div class="lr-sub">' + esc(roomName(o.roomId) || '包厢待定') + ' · 餐标 ' + (o.budget ? D.money(o.budget) + (o.budgetMode === 'person' ? '/位' : '/桌') : '未填') + '</div></div><div class="lr-val">' + I.arrow + '</div></button>').join('') +
+        '</div></div>' : '') +
       (pending.length ? '<div class="section"><div class="sec-head"><div class="sec-title">待审核 · ' + pending.length + '</div><button class="sec-action" data-act="go-orders" data-filter="pending">全部</button></div>' +
         pending.slice(0, 4).map((o) => orderCard(o, true)).join('') + '</div>' : '') +
       '<div class="section"><div class="sec-head"><div class="sec-title">今日预定</div><button class="sec-action" data-act="go-orders">全部</button></div>' +
         (todayOrders.length ? todayOrders.map((o) => orderCard(o, false)).join('') : emptyState('calendar', '今天还没有预定', '客人来消息时，可直接把聊天记录粘进来。')) + '</div>' +
       (tomorrow.length ? '<div class="section"><div class="sec-head"><div class="sec-title">明日预定</div><button class="sec-action" data-act="go-calendar" data-date="' + D.addDays(t, 1) + '">日历</button></div>' +
-        '<div class="list">' + tomorrow.map((o) => '<button class="list-row" data-act="open-order" data-id="' + o.id + '"><div class="lr-ico">' + I.clock + '</div><div class="lr-main"><div class="lr-title">' + esc(o.time) + ' · ' + esc(o.customerName || '未称呼') + '</div><div class="lr-sub">' + esc(roomName(o.roomId) || '包厢待定') + ' · ' + (o.partySize || '?') + ' 位</div></div><div class="lr-val">' + statusBadge(o) + '</div>' + I.arrow + '</button>').join('') + '</div></div>' : '') +
+        '<div class="list">' + tomorrow.map((o) => '<button class="list-row" data-act="open-order" data-id="' + o.id + '"><div class="lr-ico">' + I.clock + '</div><div class="lr-main"><div class="lr-title">' + esc(o.time) + ' · ' + esc(orderName(o)) + '</div><div class="lr-sub">' + esc(roomName(o.roomId) || '包厢待定') + ' · ' + (o.partySize || '?') + ' 位</div></div><div class="lr-val">' + statusBadge(o) + '</div>' + I.arrow + '</button>').join('') + '</div></div>' : '') +
       '<div style="height:12px"></div>';
   }
   function quick(title, cls, icon, act) {
@@ -539,7 +725,7 @@
     const invite = o.inviteCode;
     return '<div class="order-card st-' + o.status + '" data-act="open-order" data-id="' + o.id + '">' +
       '<div class="oc-top"><div class="oc-time">' + esc(o.time || '--:--') + '<small>' + esc(room || '包厢待定') + '</small></div>' +
-      '<div class="oc-main"><div class="oc-name">' + esc(o.customerName || '未称呼') + ' ' + statusBadge(o) + (invite ? chip('已发邀请', 'green') : '') + '</div>' +
+      '<div class="oc-main"><div class="oc-name">' + esc(orderName(o)) + ' ' + statusBadge(o) + (invite ? chip('已发邀请', 'green') : '') + '</div>' +
       '<div class="oc-meta"><span>' + (showDate ? D.relativeDay(o.date) + ' · ' + D.fmtDateCN(o.date) : (o.occasion || '到店')) + '</span><span>' + (o.partySize || '?') + ' 位</span>' + (o.budget ? '<span>' + D.money(o.budget) + (o.budgetMode === 'person' ? '/位' : '/桌') + '</span>' : '') + '</div></div></div>' +
       '<div class="oc-notes">' + dietary.slice(0, 3).map((x) => chip(x, 'red')).join('') +
         (pre.length ? chip('需预订 ' + pre.length + ' 道', 'gold') : '') +
@@ -587,7 +773,7 @@
       occasion: '', dishes: [], dietary: [], dietaryCustom: '', tasteHints: [], special: '', notes: '',
       budget: '', budgetMode: 'table', menuSource: 'manual',
       dietaryConfirmed: false, dishConfirmed: false, specialConfirmed: false,
-      serviceChecks: { tableware: false, pitcher: false, water: false },
+      serviceChecks: { tableware: false, pitcher: false, water: false, drink: false },
       guests: [], inviteCode: '', inviteAt: '', changeLog: [], missing: [], audit: {}
     };
     return Object.assign(base, prefill || {});
@@ -666,7 +852,7 @@
     if (!c) return '';
     const favs = customerFavs(c);
     const stats = customerStats(c);
-    return '<div class="profile-banner"><div class="pb-name">' + esc(c.name) + (c.aliases || []).map((a) => chip(a, 'outline')).join('') + (c.tags || []).map((t) => chip(t, 'gold')).join('') + '</div>' +
+    return '<div class="profile-banner"><div class="pb-name">' + esc(custLabel(c)) + (c.aliases || []).map((a) => chip(a, 'outline')).join('') + (c.tags || []).map((t) => chip(t, 'gold')).join('') + '</div>' +
       '<div class="pb-meta">' + (c.dietary && c.dietary.length ? '忌口：' + esc(c.dietary.join('、')) + '　' : '') +
         (c.tasteTags && c.tasteTags.length ? '口味：' + esc(c.tasteTags.slice(0, 5).join('、')) + '　' : '') +
         (favs.length ? '常点：' + esc(favs.map((x) => x.name + (x.count > 1 ? '×' + x.count : '')).join('、')) : '') +
@@ -844,13 +1030,22 @@
     if (!d.dishConfirmed) softMissing.push('时令菜确认');
     if (!d.specialConfirmed) softMissing.push('特殊安排确认');
 
-    // 熟客
+    // 熟客：先按手机号/微信精确匹配；同名不同手机尾号视为两个人
     let cust = D.findCustomer(S, { phone: d.phone, name: d.customerName, wechat: d.wechat });
+    let dupName = false;
     if (!cust) {
+      dupName = alive(S.customers).some((x) => x.name === String(d.customerName || '').trim());
       cust = { id: D.uid('c_'), name: d.customerName, aliases: [], wechat: d.wechat || '', phone: d.phone || '', tags: [], dietary: d.dietary || [], tasteTags: [], tasteScores: {}, dishCounts: {}, prefRoom: d.roomId, notes: '', visitCount: 0, lastVisit: '', budgetPref: d.budget || null, budgetMode: d.budgetMode || 'table', updatedAt: D.nowISO(), deleted: false, _dirty: true };
       S.customers.push(cust);
       S.meta.rev++;
     }
+    // 忌口沉淀：每次预定都把新忌口并进档案，下次配菜自动避开
+    const dietList = (d.dietary || []).filter((x) => x && x !== '无忌口');
+    if (dietList.length) {
+      const merged = Array.from(new Set([].concat(cust.dietary || [], dietList)));
+      if (merged.length !== (cust.dietary || []).length) { cust.dietary = merged; cust.dietaryUpdatedAt = D.nowISO(); cust._dirty = true; }
+    }
+    const dupNote = dupName && D.phoneTail(d.phone) ? ' · 同名已按尾' + D.phoneTail(d.phone) + '区分' : '';
     const existingEdit = f.mode === 'edit' ? alive(S.orders).find((x) => x.id === f.id) : null;
     const orig = f.original;
     let status = 'pending';
@@ -876,7 +1071,7 @@
       guests: [], inviteCode: '', inviteAt: '', changeLog: [],
       audit: { createdAt: D.nowISO(), createdBy: roleName(), updatedAt: D.nowISO(), updatedBy: roleName() }
     };
-    order.serviceChecks = Object.assign({ tableware: false, pitcher: false, water: false }, order.serviceChecks || {});
+    order.serviceChecks = Object.assign({ tableware: false, pitcher: false, water: false, drink: false }, order.serviceChecks || {});
     Object.assign(order, {
       date: d.date, time: d.time, partySize: Number(d.partySize), roomId: d.roomId,
       customerId: cust.id, customerName: d.customerName, phone: d.phone, wechat: d.wechat,
@@ -898,13 +1093,14 @@
     if (!order.code) order.code = nextOrderCode(order.date);
     order.changeLog = order.changeLog || [];
     if (changeText) order.changeLog.push({ at: D.nowISO(), by: roleName(), text: '改单：' + changeText + '（待复核）' });
-    else if (!existingEdit) order.changeLog.push({ at: D.nowISO(), by: roleName(), text: '创建预定' + (d.menuSource === 'auto' ? '（餐标智能配菜）' : '') });
+    else if (!existingEdit) order.changeLog.push({ at: D.nowISO(), by: roleName(), text: '创建预定' + (d.menuSource === 'ai' || d.menuSource === 'auto' ? '（AI 按餐标配菜）' : '') });
     else order.changeLog.push({ at: D.nowISO(), by: roleName(), text: '修改订单信息' });
+    if (!existingEdit && !order.flow) order.flow = { stage: 'new', at: D.nowISO(), by: roleName(), history: [{ at: D.nowISO(), by: roleName(), stage: 'new', note: '接单' }] };
     touch(order);
     if (!existingEdit) S.orders.push(order);
     S.meta.rev++;
-    saveState();
-    toast(existingEdit ? (changePending ? '已保存，等待店长复核改单' : '已保存') : '已存为待审核');
+    saveState({ snap: true });
+    toast((existingEdit ? (changePending ? '已保存，等待店长复核改单' : '已保存') : '已存为待审核') + dupNote);
     ui.form = null;
     ui.stack = [{ view: 'orders', params: {} }];
     ui.view = 'orderDetail'; ui.params = { orderId: order.id };
@@ -916,34 +1112,67 @@
     return prefix + '-' + String(same.length + 1).padStart(2, '0');
   }
 
-  /* ---------- 餐标配菜 ---------- */
-  function openMenuPlanner() {
-    const f = ui.form; if (!f) return;
+  /* ---------- 餐标配菜 / AI 自动菜单 ---------- */
+  function menuTargetSource() {
+    if (ui.menuTarget === 'order') {
+      const o = alive(S.orders).find((x) => x.id === ui.menuOrderId);
+      if (!o) return null;
+      return {
+        mode: 'order', order: o, time: o.time,
+        partySize: Number(o.partySize) || 0, budget: o.budget, budgetMode: o.budgetMode || 'table',
+        date: o.date, dietary: (o.dietary || []).filter((x) => x && x !== '无忌口'),
+        tasteHints: o.tasteHints || [], dishes: o.dishes || [],
+        roomId: o.roomId, customer: orderCustomer(o)
+      };
+    }
+    const f = ui.form; if (!f) return null;
     readFormFields();
     const d = f.data;
-    if (!d.partySize) { toast('先填人数，才能按餐标配菜'); return; }
-    if (!d.budget) { toast('先填餐标，比如 2000 元/桌'); return; }
-    const cust = D.findCustomer(S, { phone: d.phone, name: d.customerName, wechat: d.wechat });
-    const keptDishes = (d.dishes || []).slice();
+    return {
+      mode: 'form', order: null, time: d.time || '18:00',
+      partySize: Number(d.partySize) || 0, budget: d.budget, budgetMode: d.budgetMode || 'table',
+      date: d.date || D.todayStr(), dietary: d.dietary || [], tasteHints: d.tasteHints || [],
+      dishes: d.dishes || [], roomId: d.roomId,
+      customer: D.findCustomer(S, { phone: d.phone, name: d.customerName, wechat: d.wechat })
+    };
+  }
+  function openMenuPlanner(target) {
+    if (!can('aiMenu')) { toast('AI 配菜由老板 / 店长操作'); return; }
+    if (target === 'order') { ui.menuTarget = 'order'; ui.menuOrderId = ui.params.orderId; }
+    else { ui.menuTarget = 'form'; }
+    const src = menuTargetSource(); if (!src) return;
+    if (!src.partySize) { toast('先填人数，才能按餐标配菜'); return; }
+    if (!src.budget) { toast('先填餐标，比如 2000 元/桌'); return; }
+    const keptDishes = (src.dishes || []).slice();
     const menus = D.generateMenus(S, {
-      partySize: Number(d.partySize), budget: Number(d.budget), budgetMode: d.budgetMode || 'table',
-      date: d.date || D.todayStr(), dietary: d.dietary || [], customer: cust,
-      tasteTags: d.tasteHints || [], keepDishes: keptDishes
+      partySize: src.partySize, budget: Number(src.budget), budgetMode: src.budgetMode,
+      date: src.date, dietary: src.dietary, customer: src.customer,
+      tasteTags: src.tasteHints, keepDishes: keptDishes
     });
     if (!menus.length) { toast('没有可选菜品，检查菜单和忌口'); return; }
-    const totalBudget = D.budgetTotalOf(d.budget, d.budgetMode, d.partySize);
-    const tasteLine = [].concat((cust && cust.tasteTags) || [], d.tasteHints || []).filter((v, i, a) => a.indexOf(v) === i).slice(0, 6);
-    const dietAll = [].concat(d.dietary || [], d.dietaryCustom ? splitList(d.dietaryCustom) : []);
+    const totalBudget = D.budgetTotalOf(src.budget, src.budgetMode, src.partySize);
+    const cust = src.customer;
+    const tasteLine = [].concat((cust && cust.tasteTags) || [], src.tasteHints || []).filter((v, i, a) => a.indexOf(v) === i).slice(0, 6);
+    const dietAll = src.dietary || [];
     const keptConflicts = keptDishes.map((k) => D.dishByName(S, k.name || k) || k).filter((x) => D.dietExcludes(x, dietAll));
-    const html = '<h3>按餐标配菜</h3><p class="sheet-sub">' + (d.partySize) + ' 人 · ' + D.money(d.budget) + (d.budgetMode === 'person' ? '/位' : '/桌') + '（合计 ' + D.money(totalBudget) + '）' +
-      (keptDishes.length ? ' · 保留客户指定/已选 ' + keptDishes.length + ' 道' : '') +
-      (cust ? ' · 已参考 ' + esc(cust.name) + (tasteLine.length ? '（' + esc(tasteLine.join('、')) + '）' : '') + ' 的口味和常点' : (tasteLine.length ? ' · 已参考口味：' + esc(tasteLine.join('、')) : '')) + '</p>' +
+    const curRoom = roomOptions(src.date, src.time, src.partySize, src.order ? src.order.id : null).find((x) => x.room.id === src.roomId);
+    const sug = suggestRoom(src.date, src.time, src.partySize, src.order ? src.order.id : null);
+    const roomOk = curRoom && curRoom.fit === 'ok' && !curRoom.conflict;
+    const roomLine = roomOk
+      ? '<div class="alert-line green">' + I.room + '<div><b>包厢：' + esc(roomName(src.roomId)) + '（' + roomCapText(curRoom.room) + '）</b> · ' + src.partySize + ' 人正好，无需调整</div></div>'
+      : (sug && sug.room
+        ? '<div class="alert-line gold">' + I.room + '<div><b>建议包厢：' + esc(sug.room.name) + '（' + roomCapText(sug.room) + '）</b> · ' + esc(sug.reason) + (curRoom && curRoom.conflict ? ' · 当前 ' + esc(roomName(src.roomId)) + ' 该时段已有 ' + esc(curRoom.conflict) : '') + '<br>采用菜单时会自动安排。 </div></div>'
+        : '<div class="alert-line">' + I.alert + '<div><b>包厢排不下：</b>' + esc(sug ? sug.reason : '当天没有空闲包厢') + '</div></div>');
+    const html = '<h3>AI 配菜 · ' + src.partySize + ' 人</h3><p class="sheet-sub">' + (src.order ? esc(orderName(src.order)) + ' · ' : '') + D.money(src.budget) + (src.budgetMode === 'person' ? '/位' : '/桌') + '（合计 ' + D.money(totalBudget) + '）' +
+      (keptDishes.length ? ' · 保留指定 ' + keptDishes.length + ' 道' : '') +
+      (cust ? ' · 参考 ' + esc(custLabel(cust)) + (tasteLine.length ? '（' + esc(tasteLine.join('、')) + '）' : '') + ' 的口味和常点' : (tasteLine.length ? ' · 已参考口味：' + esc(tasteLine.join('、')) : '')) + '</p>' +
+      roomLine +
       (keptConflicts.length ? '<div class="alert-line" style="margin-bottom:12px">' + I.alert + '<div><b>指定菜与忌口冲突：</b>' + esc(keptConflicts.map((x) => x.name).join('、')) + '。系统已保留，请和客人确认。</div></div>' : '') +
       menus.map((m) => '<div class="card pad mb12"><div class="between"><div class="sec-title">' + esc(m.title) + '</div><span class="status ' + (m.within ? 'notified' : 'warn') + '">' + D.money(m.total) + '</span></div>' +
         '<div class="small muted">' + esc(m.desc) + ' · 人均 ' + D.money(Math.round(m.perPerson)) + ' · ' + m.items.length + ' 道' + (m.preorder ? ' · 含 ' + m.preorder + ' 道预订单' : '') + ' · ' + (m.remaining >= 0 ? '余 ' + D.money(m.remaining) : '超 ' + D.money(-m.remaining)) + '</div>' +
         '<div class="chips mt8">' + m.items.map((x) => '<span class="chip ' + (x.status === 'preorder' ? 'gold' : '') + '">' + esc(x.name) + ' ' + D.money(x.price) + '</span>').join('') + '</div>' +
         (m.total < totalBudget * 0.7 ? '<div class="hint">当前菜价偏低，预算可再升级硬菜或加酒水。</div>' : '') +
-        '<button class="btn primary sm mt8" data-act="adopt-menu" data-key="' + m.key + '">采用这套菜单</button></div>').join('') +
+        '<button class="btn primary sm mt8" data-act="adopt-menu" data-key="' + m.key + '">采用这套菜单' + (sug && sug.room && !roomOk ? ' + 安排 ' + esc(sug.room.name) : '') + '</button></div>').join('') +
       '<div class="btn-row"><button class="btn ghost" data-act="close-sheet">再看看</button><button class="btn soft" data-act="gen-menu">重新生成</button></div>';
     ui.menuCache = menus;
     openSheet(html);
@@ -951,14 +1180,36 @@
   function adoptMenu(key) {
     const menus = ui.menuCache || [];
     const m = menus.find((x) => x.key === key);
-    if (!m || !ui.form) return;
-    ui.form.data.dishes = m.items.map((x) => ({ id: x.id, name: x.name, price: x.price, category: x.category, status: x.status, leadDays: x.leadDays, flavor: x.flavor || [] }));
-    ui.form.data.budget = ui.form.data.budget;
-    ui.form.data.menuSource = 'auto';
-    ui.form.data.dishConfirmed = true;
-    closeSheet();
-    render({ scroll: false });
-    toast('已采用，' + D.money(m.total) + ' / ' + (m.within ? '在餐标内' : '略超餐标'));
+    if (!m) return;
+    const src = menuTargetSource();
+    if (!src) return;
+    const items = m.items.map((x) => ({ id: x.id, name: x.name, price: x.price, category: x.category, status: x.status, leadDays: x.leadDays, flavor: x.flavor || [] }));
+    const curRoom = roomOptions(src.date, src.time, src.partySize, src.order ? src.order.id : null).find((x) => x.room.id === src.roomId);
+    const needRoom = !curRoom || curRoom.fit !== 'ok' || !!curRoom.conflict;
+    const sug = needRoom ? suggestRoom(src.date, src.time, src.partySize, src.order ? src.order.id : null) : null;
+    let roomNote = '';
+    let roomId = src.roomId;
+    if (needRoom && sug && sug.room) { roomId = sug.room.id; roomNote = '，已自动安排 ' + sug.room.name + '（' + roomCapText(sug.room) + '）'; }
+    if (src.mode === 'order') {
+      const o = src.order;
+      o.dishes = items;
+      o.menuSource = 'ai';
+      o.dishConfirmed = true;
+      if (roomId) o.roomId = roomId;
+      setFlow(o, 'menu', 'AI 出 ' + items.length + ' 道菜 · ' + D.money(m.total));
+      S.meta.rev++;
+      saveState({ snap: true });
+      closeSheet(); render({ scroll: false });
+      toast('菜单已生成' + roomNote);
+    } else {
+      const d = ui.form.data;
+      d.dishes = items;
+      d.menuSource = 'ai';
+      d.dishConfirmed = true;
+      if (roomId) d.roomId = roomId;
+      closeSheet(); render({ scroll: false });
+      toast('已采用，' + D.money(m.total) + (roomNote ? roomNote : ' / ' + (m.within ? '在餐标内' : '略超餐标')));
+    }
   }
 
   /* ---------- 订单详情 ---------- */
@@ -966,19 +1217,37 @@
     if (!ui.params.orderId) return null;
     return alive(S.orders).find((o) => o.id === ui.params.orderId) || null;
   }
+  function flowBar(o) {
+    const stage = orderFlow(o);
+    const idx = FLOW_STEPS.findIndex((s) => s.key === stage);
+    const cur = FLOW_STEPS[idx] || FLOW_STEPS[0];
+    return '<div class="flow-bar">' + FLOW_STEPS.map((s, i) => '<div class="flow-step ' + (i < idx ? 'done' : (i === idx ? 'on' : '')) + '"><span class="fs-dot">' + (i < idx ? '✓' : (i + 1)) + '</span><span class="fs-label">' + s.label + '</span></div>' + (i < FLOW_STEPS.length - 1 ? '<span class="flow-line ' + (i < idx ? 'done' : '') + '"></span>' : '')).join('') +
+      '</div><div class="flow-hint">' + esc(cur.desc) + (o.flow && o.flow.at ? ' · ' + esc(String(o.flow.at).replace('T', ' ').slice(5, 16)) + ' ' + esc(o.flow.by || '') : '') + '</div>';
+  }
   function viewOrderDetail() {
     const o = selectedOrder();
     if (!o) return emptyState('list', '订单不存在', '可能已被删除，返回列表看看。');
     const room = roomName(o.roomId);
+    const roomObj = enabledRooms().find((r) => r.id === o.roomId);
+    const roomOpt = roomOptions(o.date, o.time, o.partySize, o.id).find((x) => x.room.id === o.roomId);
+    const roomProblem = roomOpt && (roomOpt.conflict ? '该时段已有 ' + roomOpt.conflict : (roomOpt.fit === 'small' ? '坐不下 ' + (o.partySize || 0) + ' 人' : (roomOpt.fit === 'big' ? '偏大，' + (o.partySize || 0) + ' 人坐 ' + roomCapText(roomObj) : ''))) || '';
     const cust = orderCustomer(o);
     const total = D.orderTotal(o);
-    const canManage = ['boss', 'manager'].includes(session.role);
+    const canManage = can('orderManage');
     const isBoss = session.role === 'boss';
     const guests = o.guests || [];
     const attend = guests.filter((g) => g.attend !== false);
     const guestDiet = Array.from(new Set(guests.flatMap((g) => g.dietary || [])));
+    const stage = orderFlow(o);
     const actions = [];
     if (canManage) {
+      if (stage === 'new') actions.push('<button class="btn primary" data-act="flow-manager">' + I.share + ' 转给店长配菜</button>');
+      if (stage === 'manager') actions.push('<button class="btn gold block" data-act="ai-menu">' + I.spark + ' AI 自动配菜 + 排包厢</button>');
+      if (stage === 'menu') actions.push('<button class="btn primary" data-act="flow-boss">' + I.share + ' 发给老板确认</button><button class="btn soft" data-act="ai-menu">重新配菜</button>');
+      if (stage === 'boss') actions.push('<button class="btn primary" data-act="flow-customer">' + I.share + ' 转发给客户确认</button>');
+      if (stage === 'customer') actions.push('<button class="btn primary" data-act="flow-confirm">' + I.check + ' 客户已确认菜品</button><button class="btn soft" data-act="flow-customer">再发一次</button>');
+      if (stage === 'confirmed' && o.status !== 'cancelled') actions.push('<button class="btn gold block" data-act="open-invite">' + I.share + ' 生成/发送邀请函</button>');
+      else if (o.status !== 'cancelled') actions.push('<button class="btn soft" data-act="open-invite">' + I.share + ' 邀请函（客户未确认菜单）</button>');
       if (o.status === 'pending') actions.push('<button class="btn primary" data-act="confirm-order">审核通过并通知</button>');
       if (o.status === 'confirmed') actions.push('<button class="btn primary" data-act="notify-order">通知后厨 / 服务员</button>');
       if (o.status === 'notified') actions.push('<button class="btn primary" data-act="complete-order">标记已完成</button>');
@@ -986,29 +1255,30 @@
         actions.push('<button class="btn soft" data-act="edit-order">修改</button>');
         actions.push('<button class="btn danger" data-act="cancel-order">取消</button>');
       }
-      if (['confirmed', 'notified'].includes(o.status)) actions.push('<button class="btn gold block" data-act="open-invite">' + I.share + ' 生成/发送邀请函</button>');
     }
     if (o.status === 'done') actions.push('<button class="btn soft" data-act="duplicate-order">再来一单</button>');
     actions.push('<button class="btn soft" data-act="copy-order">复制订单</button>');
     if (isBoss && !o.deleted) actions.push('<button class="btn danger" data-act="delete-order">删除</button>');
     return '<div class="detail-hero"><div class="dh-top"><div class="dh-code">' + esc(o.code) + '</div>' + statusBadge(o) + '</div>' +
-      '<div class="dh-name">' + esc(o.customerName || '未称呼') + '</div>' +
+      '<div class="dh-name">' + esc(orderName(o)) + '</div>' +
       '<div class="dh-meta"><span>' + esc(D.relativeDay(o.date)) + ' ' + esc(o.time) + '</span><span>' + esc(room || '包厢待定') + '</span><span>' + (o.partySize || '?') + ' 位</span></div>' +
       '<div class="dh-tags chips">' + (o.dietary || []).filter((x) => x !== '无忌口').map((x) => chip(x, 'red')).join('') + (o.occasion ? chip(o.occasion, 'gold') : '') + (o.budget ? chip(D.money(o.budget) + (o.budgetMode === 'person' ? '/位' : '/桌'), 'green') : '') + ((o.tasteHints || []).length ? chip('口味 ' + o.tasteHints.slice(0, 3).join('、'), 'outline') : '') + '</div></div>' +
       '<div class="detail-body">' +
+      '<div class="card pad flow-card">' + flowBar(o) + '</div>' +
       '<div class="card pad"><div class="info-grid">' +
         info('日期', D.fmtDateCN(o.date) + ' ' + D.weekdayCN(o.date)) +
         info('时间', o.time) +
-        info('包厢', room || '待定') +
+        info('包厢', (room || '待定') + (roomObj ? '（' + roomCapText(roomObj) + '）' : '')) +
         info('人数', (o.partySize || '?') + ' 位') +
         info('电话', o.phone || '—') +
         info('微信', o.wechat || '—') +
         info('场景', o.occasion || '—') +
         info('餐标', o.budget ? D.money(o.budget) + (o.budgetMode === 'person' ? '/位' : '/桌') : '—') +
         info('预定提前', (D.dayDiff(D.todayStr(), o.date) >= 0 ? D.dayDiff(D.todayStr(), o.date) + ' 天' : '已过')) +
-      '</div></div>' +
-      (['confirmed', 'notified', 'done'].includes(o.status) ? '<div class="section"><div class="sec-head"><div class="sec-title">开台准备</div></div><div class="card pad">' + serviceCheckHtml(o, false, true) + '</div></div>' : '') +
-      '<div class="section"><div class="sec-head"><div class="sec-title">菜单 · ' + (o.dishes || []).length + ' 道' + (total ? ' · ' + D.money(total) : '') + '</div></div><div class="card pad"><div class="dish-list">' +
+      '</div>' + (roomProblem ? '<div class="alert-line">' + I.alert + '<div><b>包厢提示：</b>' + esc(roomProblem) + (canManage ? '，可在「修改」里换包厢，或先生成菜单让 AI 自动排。' : '') + '</div></div>' : '') + '</div>' +
+      (['confirmed', 'notified', 'done'].includes(o.status) ? '<div class="section"><div class="sec-head"><div class="sec-title">开台准备 · ' + (o.partySize || 0) + ' 人</div><button class="sec-action" data-act="copy-prep-one" data-id="' + o.id + '">复制准备单</button></div><div class="card pad">' + serviceCheckHtml(o, false, true) + '</div></div>' : '') +
+      '<div class="section"><div class="sec-head"><div class="sec-title">菜单 · ' + (o.dishes || []).length + ' 道' + (total ? ' · ' + D.money(total) : '') + '</div>' +
+        (can('aiMenu') && o.status !== 'cancelled' ? '<button class="sec-action" data-act="ai-menu">' + I.spark + ' ' + ((o.dishes || []).length ? 'AI 重新配菜' : 'AI 配菜') + '</button>' : '') + '</div><div class="card pad"><div class="dish-list">' +
         ((o.dishes || []).length ? o.dishes.map((x) => {
           const dishName = typeof x === 'string' ? x : x.name;
           const d = typeof x === 'object' ? x : null;
@@ -1027,7 +1297,7 @@
         (guests.length ? guests.map((g) => '<div class="info-row"><span class="k">' + esc(g.name || '亲友') + (g.attend === false ? '（缺席）' : '') + '</span><span class="v">' + (g.dietary && g.dietary.length ? esc(g.dietary.join('、')) : '无特殊忌口') + '</span></div>').join('') : '<div class="muted small">邀请已生成，还没有亲友回执。</div>') +
         (canManage ? '<div class="btn-row mt8"><button class="btn sm soft" data-act="open-invite">邀请函</button><button class="btn sm soft" data-act="import-rsvp">录入回执码</button></div>' : '') + '</div></div>' : '') +
       (cust ? '<div class="section"><div class="sec-head"><div class="sec-title">熟客档案</div><button class="sec-action" data-act="open-customer" data-id="' + cust.id + '">查看</button></div><div class="card pad">' +
-        '<div class="row"><div class="avatar">' + esc(cust.name.slice(0, 1)) + '</div><div class="grow"><div class="cust-name">' + esc(cust.name) + (cust.tags || []).map((t) => chip(t, 'gold')).join('') + '</div>' +
+        '<div class="row"><div class="avatar">' + esc(cust.name.slice(0, 1)) + '</div><div class="grow"><div class="cust-name">' + esc(custLabel(cust)) + (cust.tags || []).map((t) => chip(t, 'gold')).join('') + '</div>' +
         '<div class="cust-sub">' + (cust.dietary && cust.dietary.length ? '忌口：' + esc(cust.dietary.join('、')) + ' · ' : '') + (cust.tasteTags && cust.tasteTags.length ? '口味：' + esc(cust.tasteTags.slice(0, 4).join('、')) : '') + '</div></div></div>' +
         (customerFavs(cust).length ? '<div class="chips mt8">' + customerFavs(cust).map((x) => chip('常点 ' + x.name + '×' + x.count, 'outline')).join('') + '</div>' : '') +
         '</div></div>' : '') +
@@ -1055,7 +1325,7 @@
       o.audit.updatedAt = D.nowISO(); o.audit.updatedBy = roleName();
       o.changePending = false;
       addLog(o, '审核通过，已通知后厨和服务员');
-      touch(o); saveState(); closeSheet(); render({ scroll: false }); toast('已确认，看板已同步');
+      touch(o); saveState({ snap: true }); closeSheet(); render({ scroll: false }); toast('已确认，看板已同步');
     };
     const c = findConflict(o);
     if (c) {
@@ -1067,7 +1337,7 @@
   function doNotifyOrder(id) {
     const o = alive(S.orders).find((x) => x.id === id); if (!o) return;
     o.status = 'notified'; o.audit = o.audit || {}; o.audit.notifiedAt = D.nowISO();
-    addLog(o, '已通知后厨和服务员'); touch(o); saveState(); render({ scroll: false }); toast('已通知');
+    addLog(o, '已通知后厨和服务员'); touch(o); saveState({ snap: true }); render({ scroll: false }); toast('已通知');
   }
   function doCompleteOrder(id) {
     const o = alive(S.orders).find((x) => x.id === id); if (!o) return;
@@ -1080,16 +1350,82 @@
         c.lastVisit = o.date;
         D.learnCustomer(c, o);
       }
-      saveState(); closeSheet(); render({ scroll: false }); toast('已完成，熟客档案已更新');
+      saveState({ snap: true }); closeSheet(); render({ scroll: false }); toast('已完成，熟客档案已更新');
     });
   }
   function doCancelOrder(id) {
     const o = alive(S.orders).find((x) => x.id === id); if (!o) return;
-    openSheet('<h3>取消预定</h3><p class="sheet-sub">' + esc(o.date) + ' ' + esc(o.time) + ' · ' + esc(o.customerName) + ' · ' + (o.partySize || '?') + ' 位</p>' +
+    openSheet('<h3>取消预定</h3><p class="sheet-sub">' + esc(o.date) + ' ' + esc(o.time) + ' · ' + esc(orderName(o)) + ' · ' + (o.partySize || '?') + ' 位</p>' +
       '<div class="field"><label>取消原因（选填）</label><input id="cancelReason" type="text" placeholder="如：客人临时改期"></div>' +
       '<div class="btn-row"><button class="btn ghost" data-act="close-sheet">返回</button><button class="btn danger" data-act="cancel-order-confirm" data-id="' + id + '">确认取消</button></div>');
   }
   function addLog(o, text) { o.changeLog = o.changeLog || []; o.changeLog.push({ at: D.nowISO(), by: roleName(), text }); }
+
+  /* ---------- 菜单流转话术 ---------- */
+  function menuLines(o) {
+    return (o.dishes || []).map((d, i) => (i + 1) + '. ' + (d.name || d) + (Number(d.price) ? '  ' + D.money(d.price) : '')).join('\n');
+  }
+  function handoffText(o) {
+    const c = orderCustomer(o);
+    const ro = enabledRooms().find((r) => r.id === o.roomId);
+    const L = [];
+    L.push('【转店长 · 配菜】' + (S.settings.shopName || '长季鲜'));
+    L.push(o.code + ' · ' + D.fmtDateCN(o.date) + ' ' + D.weekdayCN(o.date) + ' ' + o.time);
+    L.push('客人：' + orderName(o) + ' · ' + (o.partySize || '?') + ' 位' + (o.occasion ? ' · ' + o.occasion : ''));
+    L.push('餐标：' + (o.budget ? D.money(o.budget) + (o.budgetMode === 'person' ? '/位' : '/桌') : '未定'));
+    L.push('包厢：' + (roomName(o.roomId) || '待定') + (ro ? '（' + roomCapText(ro) + '）' : ''));
+    L.push('忌口：' + ((o.dietary || []).filter((x) => x && x !== '无忌口').join('、') || '待确认'));
+    if (c && (c.tasteTags || []).length) L.push('口味偏好：' + c.tasteTags.slice(0, 5).join('、'));
+    if (c && customerFavs(c).length) L.push('常点：' + customerFavs(c).map((x) => x.name).join('、'));
+    if (o.special) L.push('特殊安排：' + o.special);
+    if (o.notes) L.push('备注：' + o.notes);
+    if (o.phone) L.push('电话：' + o.phone);
+    L.push('');
+    L.push('请按人数 + 餐标出一版菜单，顺手把包厢排好。');
+    return L.join('\n');
+  }
+  function menuTextForBoss(o) {
+    const ro = enabledRooms().find((r) => r.id === o.roomId);
+    const total = D.orderTotal(o);
+    const budgetTotal = D.budgetTotalOf(o.budget, o.budgetMode, o.partySize);
+    const pre = (o.dishes || []).filter((d) => d.status === 'preorder');
+    const L = [];
+    L.push('【菜单已生成 · 待老板确认】' + o.code);
+    L.push(orderName(o) + ' · ' + (o.partySize || '?') + ' 位 · ' + (ro ? ro.name + '（' + roomCapText(ro) + '）' : '包厢待定'));
+    L.push('');
+    L.push(menuLines(o));
+    L.push('');
+    if (total) L.push('菜品合计 ' + D.money(total) + ' · 人均 ' + D.money(Math.round(total / (o.partySize || 1))) + (budgetTotal ? ' · 餐标 ' + D.money(budgetTotal) + '（' + budgetBalance(o, total) + '）' : ''));
+    if (pre.length) L.push('需提前预订：' + pre.map((d) => d.name + '（提前' + (d.leadDays || 1) + '天）').join('、'));
+    L.push('忌口已避开：' + ((o.dietary || []).filter((x) => x && x !== '无忌口').join('、') || '无'));
+    L.push('');
+    L.push('确认没问题就转给客户；要改菜我这边直接调。');
+    return L.join('\n');
+  }
+  function menuTextForCustomer(o) {
+    const ro = enabledRooms().find((r) => r.id === o.roomId);
+    const total = D.orderTotal(o);
+    const L = [];
+    L.push((orderName(o) || '您好') + '，' + (S.settings.shopName || '长季鲜') + ' 为您安排的菜单：');
+    L.push('');
+    L.push(D.fmtDateCN(o.date) + ' ' + D.weekdayCN(o.date) + ' ' + o.time + ' · ' + (o.partySize || '') + ' 位 · ' + (ro ? ro.name : '包厢待定'));
+    L.push('');
+    L.push(menuLines(o));
+    L.push('');
+    if (total && o.partySize) L.push('共 ' + (o.dishes || []).length + ' 道 · 人均 ' + D.money(Math.round(total / (o.partySize || 1))));
+    L.push('忌口已备注：' + ((o.dietary || []).filter((x) => x && x !== '无忌口').join('、') || '无'));
+    L.push('');
+    L.push('您看要不要加菜或换菜？直接回复我就行。确认后我把邀请函发您，方便转发给同席亲友。');
+    if (S.settings.address) L.push('门店地址：' + S.settings.address);
+    if (S.settings.phone) L.push('订座电话：' + S.settings.phone);
+    return L.join('\n');
+  }
+  function openForwardSheet(o, stage, title, sub, text) {
+    openSheet('<h3>' + esc(title) + '</h3><p class="sheet-sub">' + esc(sub) + '</p>' +
+      '<div class="share-text">' + esc(text) + '</div>' +
+      '<div class="btn-row mt8"><button class="btn primary" data-act="copy-forward" data-id="' + o.id + '" data-stage="' + stage + '" data-text="' + esc(text) + '">复制并标记已发送</button><button class="btn ghost" data-act="close-sheet">取消</button></div>' +
+      '<div class="hint">复制后粘贴到微信发给对方。标记后流程会前进一步，对方处理完再往下走。</div>');
+  }
 
   /* ---------- 日历 ---------- */
   function viewCalendar() {
@@ -1104,7 +1440,7 @@
       '<div class="cal-grid">' + rooms.map((r) => {
         const list = orders.filter((o) => o.roomId === r.id).sort((a, b) => a.time.localeCompare(b.time));
         return '<div class="cal-room-label"><b>' + esc(r.name) + '</b><span>' + r.seats + '座</span></div><div class="cal-slot">' +
-          (list.length ? list.map((o) => '<div class="cal-booking ' + o.status + '" data-act="open-order" data-id="' + o.id + '"><div class="cb-top"><span class="cb-time">' + esc(o.time) + '</span>' + statusBadge(o) + '</div><div class="cb-name">' + esc(o.customerName || '未称呼') + ' · ' + (o.partySize || '?') + '位</div><div class="cb-sub">' + esc(o.occasion || roomName(o.roomId)) + (findConflict(o) ? ' · <span class="red">时间冲突</span>' : '') + '</div></div>').join('') +
+          (list.length ? list.map((o) => '<div class="cal-booking ' + o.status + '" data-act="open-order" data-id="' + o.id + '"><div class="cb-top"><span class="cb-time">' + esc(o.time) + '</span>' + statusBadge(o) + '</div><div class="cb-name">' + esc(orderName(o)) + ' · ' + (o.partySize || '?') + '位</div><div class="cb-sub">' + esc(o.occasion || roomName(o.roomId)) + (findConflict(o) ? ' · <span class="red">时间冲突</span>' : '') + '</div></div>').join('') +
             '<button class="cal-free" data-act="new-order" data-date="' + date + '" data-room="' + r.id + '">+ 加一桌</button>' :
             '<button class="cal-free" data-act="new-order" data-date="' + date + '" data-room="' + r.id + '">空闲 · 点击预定</button>') +
           '</div>';
@@ -1123,7 +1459,7 @@
       (list.length ? '<div class="list">' + list.map((c) => {
         const st = customerStats(c);
         return '<div class="cust-card" data-act="open-customer" data-id="' + c.id + '"><div class="avatar ' + ((c.tags || []).some((t) => /VIP|老友/.test(t)) ? 'gold' : '') + '">' + esc((c.name || '客').slice(0, 1)) + '</div>' +
-          '<div class="cust-main"><div class="cust-name">' + esc(c.name) + (c.aliases || []).slice(0, 1).map((a) => '<span class="small muted">' + esc(a) + '</span>').join('') + (c.tags || []).slice(0, 2).map((t) => chip(t, 'gold')).join('') + '</div>' +
+          '<div class="cust-main"><div class="cust-name">' + esc(custLabel(c)) + (c.aliases || []).slice(0, 1).map((a) => '<span class="small muted">' + esc(a) + '</span>').join('') + (c.tags || []).slice(0, 2).map((t) => chip(t, 'gold')).join('') + '</div>' +
           '<div class="cust-sub">' + [(c.dietary || []).join('、'), (c.tasteTags || []).slice(0, 3).join('、'), st.lastVisit ? '上次 ' + D.relativeDay(st.lastVisit) : '新客', st.list.length ? st.list.length + ' 单' : ''].filter(Boolean).join(' · ') + '</div></div>' +
           '<span class="go">' + I.arrow + '</span></div>';
       }).join('') + '</div>' : emptyState('users', '还没有熟客档案', '录第一张预定后，系统会自动建档。')) + '<div style="height:12px"></div>';
@@ -1133,7 +1469,7 @@
     if (!c) return emptyState('users', '档案不存在', '返回熟客列表看看。');
     const st = customerStats(c);
     const favs = customerFavs(c);
-    return '<div class="profile-banner" style="padding:16px"><div class="row"><div class="avatar gold" style="width:52px;height:52px;font-size:22px">' + esc(c.name.slice(0, 1)) + '</div><div class="grow"><div class="pb-name">' + esc(c.name) + (c.aliases || []).map((a) => chip(a, 'outline')).join('') + (c.tags || []).map((t) => chip(t, 'gold')).join('') + '</div>' +
+    return '<div class="profile-banner" style="padding:16px"><div class="row"><div class="avatar gold" style="width:52px;height:52px;font-size:22px">' + esc(c.name.slice(0, 1)) + '</div><div class="grow"><div class="pb-name">' + esc(custLabel(c)) + (c.aliases || []).map((a) => chip(a, 'outline')).join('') + (c.tags || []).map((t) => chip(t, 'gold')).join('') + '</div>' +
       '<div class="pb-meta">' + (c.phone ? '电话 ' + esc(c.phone) + '　' : '') + (c.wechat ? '微信 ' + esc(c.wechat) : '') + '</div></div></div>' +
       '<div class="pb-meta mt8">' + (c.dietary && c.dietary.length ? '<b>忌口：</b>' + esc(c.dietary.join('、')) + '　' : '') + (c.prefRoom ? '偏好包厢：' + esc(roomName(c.prefRoom)) + '　' : '') + '到店 ' + (c.visitCount || 0) + ' 次' + (st.lastVisit ? ' · 上次 ' + D.relativeDay(st.lastVisit) : '') + '</div>' +
       (c.notes ? '<div class="pb-notes">' + esc(c.notes) + '</div>' : '') + '</div>' +
@@ -1175,7 +1511,7 @@
     touch(target);
     if (!c) S.customers.push(target);
     S.meta.rev++;
-    saveState(); closeSheet();
+    saveState({ snap: true }); closeSheet();
     if (ui.view === 'customerDetail') { render({ scroll: false }); } else { render(); }
     toast('熟客档案已保存');
   }
@@ -1183,7 +1519,8 @@
 
   /* ---------- 菜品 ---------- */
   function viewDishes() {
-    const canEdit = ['boss', 'manager', 'kitchen'].includes(session.role);
+    const canEdit = can('menuShelf');
+    const canAdd = can('menuEdit');
     const all = alive(S.dishes);
     const q = ui.dishSearch.trim().toLowerCase();
     const list = q ? all.filter((d) => [d.name, d.category, d.note, (d.tags || []).join(' '), (d.flavor || []).join(' ')].join(' ').toLowerCase().includes(q)) : all;
@@ -1193,28 +1530,34 @@
       ['off', '已下市', list.filter((d) => d.status === 'off')]
     ];
     return '<div class="view-head"><div><div class="view-title">时令菜品</div><div class="view-sub">' + all.filter((d) => d.status === 'on').length + ' 道在售 · ' + all.filter((d) => d.status === 'preorder').length + ' 道需预订</div></div>' +
-      (canEdit ? '<button class="btn sm soft" data-act="add-dish">' + I.plus + ' 加菜</button>' : '') + '</div>' +
-      '<div class="notice">' + (canEdit ? '后厨每天花 1 分钟，把在售 / 需预订 / 下市点一遍。老板和熟客看到的时令菜单会立刻跟着变。' : '后厨更新后，这里会同步显示。') + '</div>' +
+      (canAdd ? '<button class="btn sm soft" data-act="add-dish">' + I.plus + ' 加菜</button>' : '') + '</div>' +
+      '<div class="notice">' + (canEdit ? '老板 / 店长维护：上下架、改价、加新菜。后厨和服务员只能看，不能改。' : '时令菜单由店长维护，这里只能查看；有下市或断货的菜，直接跟店长说。') + '</div>' +
       '<div class="searchbar mt12">' + I.search + '<input id="dishSearch" placeholder="客人问菜？搜菜名、做法、口味" value="' + esc(ui.dishSearch) + '"></div>' +
       '<div class="btn-row mt12"><button class="btn soft" data-act="share-menu">' + I.share + ' 分享时令菜单</button><button class="btn soft" data-act="copy-menu-text">复制菜单文字</button></div>' +
       (!list.length ? emptyState('dish', '没有找到这道菜', '换个关键词，或点「加菜」录入。') : '') +
       groups.map((g) => (g[2].length ? '<div class="section"><div class="sec-head"><div class="sec-title">' + g[1] + ' · ' + g[2].length + '</div></div><div class="list">' +
-        g[2].sort((a, b) => D.CATEGORIES.indexOf(a.category) - D.CATEGORIES.indexOf(b.category) || a.price - b.price).map((d) => '<div class="dish-row ' + (d.status === 'off' ? 'off' : '') + '"><div class="d-main"><div class="d-name">' + esc(d.name) + ' <span class="small muted">' + D.money(d.price) + '</span></div>' +
+        g[2].sort((a, b) => D.CATEGORIES.indexOf(a.category) - D.CATEGORIES.indexOf(b.category) || a.price - b.price).map((d) => '<div class="dish-row ' + (d.status === 'off' ? 'off' : '') + '"><div class="d-main"><div class="d-name">' + esc(d.name) + ' ' +
+          (Number(d.price) > 0 ? '<span class="small muted">' + D.money(d.price) + '</span>' : '<span class="chip gold">待店长定价</span>') +
+          (d.classic ? ' <span class="chip red">招牌</span>' : '') + '</div>' +
           '<div class="d-meta">' + esc(d.category) + (d.note ? ' · ' + esc(d.note) : '') + (d.status === 'preorder' ? ' · 提前' + d.leadDays + '天' : '') + ' · ' + esc((d.updatedAt || '').slice(5, 10)) + ' 更新</div></div>' +
-          (canEdit ? '<div class="ds-toggle"><button class="' + (d.status === 'on' ? 'on on' : '') + '" data-act="set-dish-status" data-id="' + d.id + '" data-status="on">在售</button><button class="' + (d.status === 'preorder' ? 'on pre' : '') + '" data-act="set-dish-status" data-id="' + d.id + '" data-status="preorder">预订</button><button class="' + (d.status === 'off' ? 'on off' : '') + '" data-act="set-dish-status" data-id="' + d.id + '" data-status="off">下市</button></div>' : '<span class="status ' + (d.status === 'on' ? 'notified' : d.status === 'preorder' ? 'pending' : 'done') + '">' + (d.status === 'on' ? '在售' : d.status === 'preorder' ? '需预订' : '下市') + '</span>') +
+          (canEdit ? '<div class="ds-toggle"><button class="' + (d.status === 'on' ? 'on on' : '') + '" data-act="set-dish-status" data-id="' + d.id + '" data-status="on">在售</button><button class="' + (d.status === 'preorder' ? 'on pre' : '') + '" data-act="set-dish-status" data-id="' + d.id + '" data-status="preorder">预订</button><button class="' + (d.status === 'off' ? 'on off' : '') + '" data-act="set-dish-status" data-id="' + d.id + '" data-status="off">下市</button><button class="ds-edit" data-act="edit-dish" data-id="' + d.id + '" aria-label="编辑">' + I.edit + '</button></div>' : '<span class="status ' + (d.status === 'on' ? 'notified' : d.status === 'preorder' ? 'pending' : 'done') + '">' + (d.status === 'on' ? '在售' : d.status === 'preorder' ? '需预订' : '下市') + '</span>') +
           '</div>').join('') + '</div></div>' : '')).join('') +
       '<div style="height:12px"></div>';
   }
   function openDishSheet(d) {
+    if (!can('menuEdit')) { toast('菜单由老板 / 店长维护'); return; }
     const edit = !!d;
-    const data = d || { name: '', category: '热菜', price: '', status: 'on', leadDays: 1, tags: [], flavor: [], note: '' };
-    openSheet('<h3>' + (edit ? '编辑菜品' : '新增菜品') + '</h3><p class="sheet-sub">价格按一桌/一份估算，用于餐标配菜。</p>' +
+    const canPrice = can('menuPrice');
+    const data = d || { name: '', category: '热菜', price: '', status: 'on', leadDays: 1, tags: [], flavor: [], note: '', classic: false };
+    openSheet('<h3>' + (edit ? '编辑菜品' : '新增菜品') + '</h3><p class="sheet-sub">价格用于餐标配菜；' + (canPrice ? '改价会立刻影响 AI 配菜结果。' : '菜价只有店长能改。') + '</p>' +
       '<div class="field"><label>菜名</label><input id="dName" type="text" value="' + esc(data.name) + '"></div>' +
-      '<div class="field-row"><div class="field"><label>类别</label><select id="dCat">' + D.CATEGORIES.map((c) => '<option ' + (data.category === c ? 'selected' : '') + '>' + c + '</option>').join('') + '</select></div><div class="field"><label>价格（元）</label><input id="dPrice" type="number" inputmode="numeric" value="' + esc(data.price) + '"></div></div>' +
+      '<div class="field-row"><div class="field"><label>类别</label><select id="dCat">' + D.CATEGORIES.map((c) => '<option ' + (data.category === c ? 'selected' : '') + '>' + c + '</option>').join('') + '</select></div><div class="field"><label>价格（元）</label><input id="dPrice" type="number" inputmode="numeric" value="' + esc(data.price) + '" ' + (canPrice ? '' : 'readonly') + ' placeholder="' + (canPrice ? '' : '店长定价') + '"></div></div>' +
+      (canPrice ? '' : '<div class="hint" style="margin:-4px 0 8px">' + I.lock + ' 你只能改菜名、分类、做法和状态；价格字段已锁定，需店长修改。</div>') +
       '<div class="field-row"><div class="field"><label>状态</label><select id="dStatus"><option value="on" ' + (data.status === 'on' ? 'selected' : '') + '>在售</option><option value="preorder" ' + (data.status === 'preorder' ? 'selected' : '') + '>需预订</option><option value="off" ' + (data.status === 'off' ? 'selected' : '') + '>下市</option></select></div><div class="field"><label>提前天数</label><input id="dLead" type="number" min="0" value="' + esc(data.leadDays || 0) + '"></div></div>' +
       '<div class="field"><label>风味标签</label><input id="dFlavor" type="text" value="' + esc((data.flavor || []).join('，')) + '" placeholder="清淡、鲜、红糟、滋补"></div>' +
       '<div class="field"><label>约束标签</label><input id="dTags" type="text" value="' + esc((data.tags || []).join('，')) + '" placeholder="海鲜、素、猪、牛、辣、蛋、坚果"></div>' +
       '<div class="field"><label>备注</label><input id="dNote" type="text" value="' + esc(data.note) + '" placeholder="产地、做法、提示"></div>' +
+      '<label class="row small" style="margin:6px 0 12px"><input id="dClassic" type="checkbox" ' + (data.classic ? 'checked' : '') + ' style="width:18px;height:18px">设为招牌 / 经典菜（邀请函上展示）</label>' +
       '<div class="btn-row"><button class="btn ghost" data-act="close-sheet">取消</button><button class="btn primary" data-act="save-dish" data-id="' + (edit ? d.id : '') + '">保存</button></div>');
   }
   function saveDish(id) {
@@ -1222,21 +1565,29 @@
     if (!name.trim()) { toast('请填菜名'); return; }
     const d = id ? alive(S.dishes).find((x) => x.id === id) : null;
     const target = d || { id: D.uid('d_'), name: '', category: '热菜', price: 0, status: 'on', leadDays: 0, tags: [], flavor: [], note: '', updatedAt: D.nowISO(), deleted: false, _dirty: true };
+    const canPrice = can('menuPrice');
+    const oldPrice = Number(target.price) || 0;
     target.name = name.trim();
     target.category = ($('#dCat') || {}).value || '热菜';
-    target.price = Number(($('#dPrice') || {}).value) || 0;
+    if (canPrice) target.price = Number(($('#dPrice') || {}).value) || 0;
     target.status = ($('#dStatus') || {}).value || 'on';
     target.leadDays = Number(($('#dLead') || {}).value) || 0;
     target.flavor = splitList(($('#dFlavor') || {}).value);
     target.tags = splitList(($('#dTags') || {}).value);
     target.note = ($('#dNote') || {}).value || '';
+    target.classic = !!($('#dClassic') || {}).checked;
     touch(target);
     if (!d) S.dishes.push(target);
     S.meta.rev++;
-    saveState(); closeSheet(); render({ scroll: false }); toast('菜品已保存');
+    saveState({ snap: true }); closeSheet(); render({ scroll: false });
+    if (!canPrice && target.price <= 0) toast('已提交，等店长定价后才会进入 AI 配菜');
+    else if (!canPrice && Number(($('#dPrice') || {}).value) !== oldPrice) toast('已保存（菜价未变，改价需店长）');
+    else toast('菜品已保存');
   }
   function setDishStatus(id, status) {
+    if (!can('menuShelf')) { toast('上下架由老板 / 店长操作'); return; }
     const d = alive(S.dishes).find((x) => x.id === id); if (!d) return;
+    if (status === 'on' && !(Number(d.price) > 0) && !can('menuPrice')) { toast('这道菜还没定价，等店长定价后再上架'); return; }
     d.status = status; touch(d); S.meta.rev++;
     saveState(); render({ scroll: false }); toast('已更新为「' + (status === 'on' ? '在售' : status === 'preorder' ? '需提前预订' : '下市') + '」');
   }
@@ -1259,17 +1610,21 @@
     return { orders, dishes: Object.keys(dishMap).map((k) => dishMap[k]).sort((a, b) => a.category - b.category), guests: orders.reduce((n, o) => n + (Number(o.partySize) || 0), 0) };
   }
   function viewPrep() {
+    if (!can('prepView')) return emptyState('clipboard', '备货单由店长查看', '服务员请用「看板」按包厢做开台准备。');
+    const canManage = can('prepManage');
     const date = ui.prepDate || D.todayStr();
     const sum = prepSummary(date);
     const preorder = sum.dishes.filter((d) => d.status === 'preorder');
     const onsite = sum.dishes.filter((d) => d.status !== 'preorder');
     const dietLines = [];
-    sum.orders.forEach((o) => { if ((o.dietary || []).length) dietLines.push({ room: roomName(o.roomId), time: o.time, name: o.customerName, text: (o.dietary || []).join('、') }); (o.guests || []).forEach((g) => { if ((g.dietary || []).length) dietLines.push({ room: roomName(o.roomId), time: o.time, name: g.name + '（亲友）', text: g.dietary.join('、') }); }); });
-    return '<div class="view-head"><div><div class="view-title">备货清单</div><div class="view-sub">只统计已确认 / 已通知的订单</div></div></div>' +
+    sum.orders.forEach((o) => { if ((o.dietary || []).length) dietLines.push({ room: roomName(o.roomId), time: o.time, name: orderName(o), text: (o.dietary || []).join('、') }); (o.guests || []).forEach((g) => { if ((g.dietary || []).length) dietLines.push({ room: roomName(o.roomId), time: o.time, name: g.name + '（亲友）', text: g.dietary.join('、') }); }); });
+    return '<div class="view-head"><div><div class="view-title">备货清单</div><div class="view-sub">只统计已确认 / 已通知的订单' + (canManage ? '' : ' · 只读') + '</div></div></div>' +
       '<div class="cal-nav"><button class="btn sm soft" data-act="prep-prev">' + I.back + '</button><div class="cal-date">' + D.fmtDateCN(date) + '<small>' + D.weekdayCN(date) + ' · ' + D.relativeDay(date) + '</small></div><button class="btn sm soft" data-act="prep-next">' + I.arrow + '</button></div>' +
       '<div class="stat-row"><div class="stat-cell"><b>' + sum.orders.length + '</b><span>桌数</span></div><div class="stat-cell"><b>' + sum.guests + '</b><span>人数</span></div><div class="stat-cell"><b>' + sum.dishes.length + '</b><span>菜品数</span></div></div>' +
-      '<div class="btn-row mt12"><button class="btn primary" data-act="copy-prep">' + I.clipboard + ' 复制发给厨师</button><button class="btn soft" data-act="export-prep">导出 CSV</button></div>' +
-      '<button class="btn ghost block mt8" data-act="print-prep">打印备货单</button>' +
+      (canManage ?
+        '<div class="btn-row mt12"><button class="btn primary" data-act="copy-prep">' + I.clipboard + ' 复制发给厨师</button><button class="btn soft" data-act="export-prep">导出 CSV</button></div>' +
+        '<button class="btn ghost block mt8" data-act="print-prep">打印备货单</button>' :
+        '<div class="notice mt12">备货单由店长维护：复制、导出、打印都在店长端。后厨可以随时查看当天需求。</div>') +
       '<div class="section"><div class="sec-head"><div class="sec-title">需提前预订 · ' + preorder.length + '</div></div><div class="card pad">' +
         (preorder.length ? preorder.map((d) => '<div class="dish-line"><span><b>' + esc(d.name) + '</b> <span class="small muted">' + esc(d.rooms.join('、')) + '</span></span><span class="row"><span class="chip gold">× ' + d.count + ' 桌</span>' + (d.leadDays ? '<span class="tiny muted">提前' + d.leadDays + '天</span>' : '') + '</span></div>').join('') : '<div class="muted small">暂无需要提前预订的菜。</div>') + '</div></div>' +
       '<div class="section"><div class="sec-head"><div class="sec-title">在售菜品 · ' + onsite.length + '</div></div><div class="card pad">' +
@@ -1291,8 +1646,8 @@
     lines.push('', '【忌口 / 特殊安排】');
     let any = false;
     sum.orders.forEach((o) => {
-      if ((o.dietary || []).length) { any = true; lines.push('· ' + roomName(o.roomId) + ' ' + o.time + ' ' + o.customerName + '：' + o.dietary.join('、')); }
-      if (o.special) { any = true; lines.push('· ' + roomName(o.roomId) + ' ' + o.time + ' ' + o.customerName + '：' + o.special); }
+      if ((o.dietary || []).length) { any = true; lines.push('· ' + roomName(o.roomId) + ' ' + o.time + ' ' + orderName(o) + '：' + o.dietary.join('、')); }
+      if (o.special) { any = true; lines.push('· ' + roomName(o.roomId) + ' ' + o.time + ' ' + orderName(o) + '：' + o.special); }
       (o.guests || []).forEach((g) => { if ((g.dietary || []).length) { any = true; lines.push('· ' + roomName(o.roomId) + ' ' + g.name + '（亲友）：' + g.dietary.join('、')); } });
     });
     if (!any) lines.push('（无）');
@@ -1303,7 +1658,7 @@
     const sum = prepSummary(date);
     const rows = [['日期', '包厢', '时间', '客人', '人数', '餐标', '菜品', '忌口', '特殊安排']];
     sum.orders.forEach((o) => {
-      rows.push([o.date, roomName(o.roomId), o.time, o.customerName, o.partySize, o.budget || '', (o.dishes || []).map((d) => d.name || d).join('、'), (o.dietary || []).join('、'), o.special || '']);
+      rows.push([o.date, roomName(o.roomId), o.time, orderName(o), o.partySize, o.budget || '', (o.dishes || []).map((d) => d.name || d).join('、'), (o.dietary || []).join('、'), o.special || '']);
     });
     const csv = '﻿' + rows.map((r) => r.map((c) => '"' + String(c === null || c === undefined ? '' : c).replace(/"/g, '""') + '"').join(',')).join('\r\n');
     download('长季鲜备货-' + date + '.csv', csv, 'text/csv;charset=utf-8');
@@ -1321,19 +1676,21 @@
     return '<div class="board-head"><div><div class="view-title">接待看板</div><div class="view-sub">' + D.fmtDateCN(date) + ' ' + D.weekdayCN(date) + ' · ' + orders.length + ' 桌 / ' + guests + ' 人' + prepLine + '</div></div>' +
       '<button class="icon-btn" style="background:#f1ece1;color:var(--ink)" data-act="refresh-now" aria-label="刷新">' + I.refresh + '</button></div>' +
       '<div class="seg mb12"><button class="' + (date === D.todayStr() ? 'on' : '') + '" data-act="board-date" data-date="' + D.todayStr() + '">今天</button><button class="' + (date === D.addDays(D.todayStr(), 1) ? 'on' : '') + '" data-act="board-date" data-date="' + D.addDays(D.todayStr(), 1) + '">明天</button></div>' +
+      (orders.length ? '<button class="btn soft block mb12" data-act="copy-board-prep">' + I.clipboard + ' 复制今日开台准备单（包厢 + 算量）</button>' : '') +
       (orders.length ? orders.map((o) => {
         const diet = (o.dietary || []).filter((x) => x && x !== '无忌口');
         const guestDiet = Array.from(new Set((o.guests || []).flatMap((g) => g.dietary || [])));
         const special = o.special || '';
         const soon = o.date === D.todayStr() && toMinutes(o.time) - (new Date().getHours() * 60 + new Date().getMinutes()) <= 120 && toMinutes(o.time) >= (new Date().getHours() * 60 + new Date().getMinutes());
         return '<div class="board-card ' + (diet.length || guestDiet.length ? 'alert' : (soon ? 'soon' : '')) + '" data-act="open-order" data-id="' + o.id + '">' +
-          '<div class="bc-top"><div class="bc-time">' + esc(o.time) + '<small>' + esc(roomName(o.roomId)) + '</small></div><div class="grow"><div class="bc-title">' + esc(o.customerName || '未称呼') + ' · ' + (o.partySize || '?') + '位</div><div class="bc-sub">' + esc(o.occasion || '到店') + (o.budget ? ' · ' + D.money(o.budget) : '') + '</div></div>' + statusBadge(o) + '</div>' +
+          '<div class="bc-top"><div class="bc-time">' + esc(o.time) + '<small>' + esc(roomName(o.roomId)) + '</small></div><div class="grow"><div class="bc-title">' + esc(orderName(o)) + ' · ' + (o.partySize || '?') + '位</div><div class="bc-sub">' + esc(roomName(o.roomId) || '包厢待定') + ' · ' + esc(roomCapText(enabledRooms().find((r) => r.id === o.roomId) || {})) + ' · ' + esc(o.occasion || '到店') + (o.budget ? ' · ' + D.money(o.budget) : '') + '</div></div>' + statusBadge(o) + '</div>' +
           (diet.length ? '<div class="bc-alert">忌口：' + esc(diet.join('、')) + '</div>' : '') +
           (guestDiet.length ? '<div class="bc-alert">亲友忌口：' + esc(guestDiet.join('、')) + '</div>' : '') +
           (special ? '<div class="bc-special">特殊安排：' + esc(special) + '</div>' : '') +
           serviceCheckHtml(o, true) +
           '<div class="chips">' + (o.dishes || []).slice(0, 6).map((d) => '<span class="chip">' + esc(d.name || d) + '</span>').join('') + ((o.dishes || []).length > 6 ? '<span class="chip outline">+' + ((o.dishes || []).length - 6) + '</span>' : '') + '</div>' +
           ((o.guests || []).length ? '<div class="hint">亲友回执：' + (o.guests || []).filter((g) => g.attend !== false).length + ' 位到场' + (guestDiet.length ? ' · 忌口已标注' : '') + '</div>' : '') +
+          '<button class="btn xs soft mt8" data-act="copy-prep-one" data-id="' + o.id + '">复制本桌准备单</button>' +
           '</div>';
       }).join('') : emptyState('bell', '这一天没有已确认的预定', '订单经店长确认后会自动出现在看板。')) +
       '<div class="board-refresh">每 30 秒自动刷新' + (ui.lastSyncAt ? ' · 最近同步 ' + ui.lastSyncAt : '') + '</div>';
@@ -1353,7 +1710,7 @@
       '<div class="searchbar">' + I.search + '<input id="ledgerSearch" placeholder="搜客人、电话、菜品、日期" value="' + esc(ui.ledgerSearch) + '"></div>' +
       '<div class="seg mb12"><button class="' + (ui.ledgerFilter === 'all' ? 'on' : '') + '" data-act="ledger-filter" data-filter="all">全部</button><button class="' + (ui.ledgerFilter === 'done' ? 'on' : '') + '" data-act="ledger-filter" data-filter="done">已完成</button><button class="' + (ui.ledgerFilter === 'cancelled' ? 'on' : '') + '" data-act="ledger-filter" data-filter="cancelled">已取消</button></div>' +
       (list.length ? '<div class="list">' + list.map((o) => '<div class="ledger-item" data-act="open-order" data-id="' + o.id + '"><div class="ledger-date"><b>' + esc(o.date.slice(8)) + '</b><span>' + esc(D.weekdayCN(o.date)) + '</span></div>' +
-        '<div class="ledger-main"><div class="l1">' + esc(o.customerName || '未称呼') + ' · ' + esc(roomName(o.roomId)) + ' · ' + (o.partySize || '?') + '位 ' + statusBadge(o) + '</div><div class="l2">' + esc(o.date) + ' ' + esc(o.time) + ' · ' + esc((o.dishes || []).map((d) => d.name || d).slice(0, 3).join('、')) + '</div></div><span class="muted small">' + (o.budget ? D.money(o.budget) : '') + '</span></div>').join('') + '</div>' :
+        '<div class="ledger-main"><div class="l1">' + esc(orderName(o)) + ' · ' + esc(roomName(o.roomId)) + ' · ' + (o.partySize || '?') + '位 ' + statusBadge(o) + '</div><div class="l2">' + esc(o.date) + ' ' + esc(o.time) + ' · ' + esc((o.dishes || []).map((d) => d.name || d).slice(0, 3).join('、')) + '</div></div><span class="muted small">' + (o.budget ? D.money(o.budget) : '') + '</span></div>').join('') + '</div>' :
         emptyState('list', '还没有历史记录', '已完成的订单会归档到这里，方便查老客。')) +
       '<div style="height:12px"></div>';
   }
@@ -1362,13 +1719,15 @@
   function viewMore() {
     const role = session.role;
     const tools = [];
-    if (role === 'boss' || role === 'manager') {
+    if (can('orderManage')) {
       tools.push(['ledger', '历史台账', '查老客消费和常点菜', 'list', '']);
       tools.push(['customers', '熟客档案', '口味、忌口、到店记录', 'users', '']);
-      tools.push(['dishes', '时令菜品', '后厨更新，熟客可见', 'dish', '']);
+      tools.push(['dishes', '时令菜品', '上下架、改菜、改菜价', 'dish', '']);
       tools.push(['prep', '备货清单', '按日汇总给厨师', 'clipboard', 'gold']);
     }
     if (role === 'kitchen') {
+      tools.push(['dishes', '时令菜单', '只看在售 / 预订 / 下市', 'dish', '']);
+      tools.push(['prep', '备货单', '看当日要备什么（只读）', 'clipboard', 'gold']);
       tools.push(['orders', '今日需求', '看每桌点了什么', 'list', '']);
       tools.push(['ledger', '历史台账', '回看老菜单', 'list', '']);
     }
@@ -1398,12 +1757,20 @@
         '<div class="field"><label>店名</label><input id="setShopName" type="text" value="' + esc(S.settings.shopName) + '"></div>' +
         '<div class="field"><label>菜系</label><input id="setCuisine" type="text" value="' + esc(S.settings.cuisine || '') + '" placeholder="福安菜 × 厦门海鲜"></div>' +
         '<div class="field"><label>营业时间</label><input id="setHours" type="text" value="' + esc(S.settings.businessHours || '') + '"></div>' +
-        '<div class="field-row"><div class="field"><label>地址</label><input id="setAddress" type="text" value="' + esc(S.settings.address || '') + '"></div><div class="field"><label>电话</label><input id="setPhone" type="tel" value="' + esc(S.settings.phone || '') + '"></div></div>' +
+        '<div class="field"><label>门店地址（邀请函定位 / 导航用）</label><input id="setAddress" type="text" value="' + esc(S.settings.address || '') + '" placeholder="如：福安市城南街道XX路88号"></div>' +
+        '<div class="field"><label>电话</label><input id="setPhone" type="tel" value="' + esc(S.settings.phone || '') + '"></div>' +
+        '<div class="field"><label>店招广告语</label><input id="setSlogan" type="text" value="' + esc(S.settings.slogan || '') + '" placeholder="时令海鲜 · 私厨家宴"></div>' +
+        '<div class="field"><label>店招广告位文案（选填）</label><input id="setAdText" type="text" value="' + esc(S.settings.adText || '') + '" placeholder="本月主打：下白石鲟 / 承接寿宴"></div>' +
+        '<div class="field-row"><div class="field"><label>纬度（选填）</label><input id="setLat" type="text" inputmode="decimal" value="' + esc(S.settings.lat || '') + '" placeholder="27.09"></div><div class="field"><label>经度（选填）</label><input id="setLng" type="text" inputmode="decimal" value="' + esc(S.settings.lng || '') + '" placeholder="119.65"></div></div>' +
+        '<div class="hint" style="margin:-4px 0 10px">填了经纬度，邀请函里的导航二维码直接定位到门口；只填地址则按「店名 + 地址」搜索。</div>' +
         '<button class="btn primary sm" data-act="save-shop">保存门店信息</button></div>' +
       '<div class="form-card"><h3>包厢 · ' + enabledRooms().length + '</h3>' +
-        alive(S.rooms).sort((a, b) => (a.sort || 0) - (b.sort || 0)).map((r) => '<div class="field-row" style="grid-template-columns:1.3fr .8fr auto;align-items:end;margin-bottom:8px"><div class="field" style="margin:0"><label>名称</label><input id="roomName_' + r.id + '" type="text" value="' + esc(r.name) + '"></div><div class="field" style="margin:0"><label>座位</label><input id="roomSeats_' + r.id + '" type="number" value="' + esc(r.seats) + '"></div><label class="row small muted" style="padding-bottom:12px"><input id="roomOn_' + r.id + '" type="checkbox" ' + (r.enabled !== false ? 'checked' : '') + ' style="width:18px;height:18px">启用</label></div>').join('') +
+        alive(S.rooms).sort((a, b) => (a.sort || 0) - (b.sort || 0)).map((r) => '<div class="room-edit"><div class="field" style="margin:0"><label>名称</label><input id="roomName_' + r.id + '" type="text" value="' + esc(r.name) + '"></div>' +
+          '<div class="field" style="margin:0"><label>最少</label><input id="roomMin_' + r.id + '" type="number" min="1" value="' + esc(r.minSeats || '') + '"></div>' +
+          '<div class="field" style="margin:0"><label>最多</label><input id="roomMax_' + r.id + '" type="number" min="1" value="' + esc(r.maxSeats || r.seats) + '"></div>' +
+          '<label class="row small muted" style="padding-bottom:12px"><input id="roomOn_' + r.id + '" type="checkbox" ' + (r.enabled !== false ? 'checked' : '') + ' style="width:18px;height:18px">启用</label></div>').join('') +
         '<div class="btn-row"><button class="btn soft sm" data-act="add-room">+ 加包厢</button><button class="btn primary sm" data-act="save-rooms">保存包厢</button></div>' +
-        '<div class="hint">默认 VIP1–VIP3，最多 6 间。改完名字，订单和看板会同步。</div></div>' +
+        '<div class="hint">默认 VIP1 / VIP2 坐 10–12 人、VIP3 坐 15–18 人。AI 配菜会按人数自动排到「刚好坐得下」的包厢。</div></div>' +
       '<div class="form-card"><h3>角色密码（选填）</h3><p class="hint" style="margin-top:-6px;margin-bottom:10px">4 位数字，防止店员误进老板端；不是账号安全体系。</p>' +
         Object.keys(ROLES).map((k) => '<div class="field"><label>' + ROLES[k].name + '</label><input id="pin_' + k + '" type="password" inputmode="numeric" maxlength="4" value="' + esc((S.settings.pins || {})[k] || '') + '" placeholder="不设则留空"></div>').join('') +
         '<button class="btn primary sm" data-act="save-pins">保存密码</button></div>' +
@@ -1443,9 +1810,15 @@
   /* ---------- 邀请函 / 回执 ---------- */
   function invitePayload(o) {
     const sync = (window.CJXSync && window.CJXSync.isAuthed()) ? window.CJXSync.getConfig() : null;
+    const s = S.settings;
     return {
-      v: 1, t: 'invite',
-      shop: { name: S.settings.shopName, cuisine: S.settings.cuisine, hours: S.settings.businessHours, phone: S.settings.phone },
+      v: 2, t: 'invite',
+      shop: {
+        name: s.shopName, cuisine: s.cuisine, hours: s.businessHours, phone: s.phone,
+        address: s.address || '', slogan: s.slogan || '', adText: s.adText || '',
+        nav: D.navUrlOf(s)
+      },
+      classic: D.classicDishes(S, 3),
       order: {
         id: o.id, code: o.code, date: o.date, time: o.time, room: roomName(o.roomId),
         host: o.customerName, partySize: o.partySize, occasion: o.occasion,
@@ -1492,84 +1865,139 @@
       }, 60);
     });
   }
+  function wrapLines(ctx, text, maxWidth, maxLines) {
+    const chars = String(text || '').split('');
+    const lines = [];
+    let cur = '';
+    chars.forEach((ch) => {
+      const test = cur + ch;
+      if (ctx.measureText(test).width > maxWidth && cur) { lines.push(cur); cur = ch; }
+      else cur = test;
+    });
+    if (cur) lines.push(cur);
+    if (lines.length > (maxLines || 2)) { lines.length = maxLines || 2; lines[maxLines - 1] = lines[maxLines - 1].slice(0, -1) + '…'; }
+    return lines;
+  }
   async function buildInvitePoster(o) {
-    const W = 1080, H = 1620;
+    const W = 1080, H = 1920;
     const c = document.createElement('canvas'); c.width = W; c.height = H;
     const ctx = c.getContext('2d');
+    const shop = S.settings;
     const bg = ctx.createLinearGradient(0, 0, W, H);
     bg.addColorStop(0, '#162d27'); bg.addColorStop(.55, '#24483b'); bg.addColorStop(1, '#132720');
     ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-    roundRect(ctx, 52, 52, W - 104, H - 104, 46);
+    roundRect(ctx, 40, 40, W - 80, H - 80, 48);
     ctx.fillStyle = '#fbf8f1'; ctx.fill();
     ctx.strokeStyle = '#d9bd85'; ctx.lineWidth = 3; ctx.stroke();
-    roundRect(ctx, 74, 74, W - 148, H - 148, 38);
-    ctx.strokeStyle = 'rgba(184,137,63,.38)'; ctx.lineWidth = 2; ctx.stroke();
+    roundRect(ctx, 62, 62, W - 124, H - 124, 40);
+    ctx.strokeStyle = 'rgba(184,137,63,.34)'; ctx.lineWidth = 2; ctx.stroke();
 
-    const shop = S.settings;
     ctx.textAlign = 'center';
     ctx.fillStyle = '#b8893f'; ctx.font = '22px sans-serif';
-    ctx.fillText('I N V I T A T I O N', W / 2, 150);
-    ctx.fillStyle = '#1f3a32'; ctx.font = '700 62px "Songti SC","STSong","SimSun",serif';
-    ctx.fillText(shop.shopName || '长季鲜', W / 2, 235);
+    ctx.fillText('I N V I T A T I O N', W / 2, 142);
+    ctx.fillStyle = '#1f3a32'; ctx.font = '700 66px "Songti SC","STSong","SimSun",serif';
+    ctx.fillText(shop.shopName || '长季鲜', W / 2, 232);
     ctx.fillStyle = '#8a8070'; ctx.font = '24px sans-serif';
-    ctx.fillText(shop.cuisine || '', W / 2, 280);
+    ctx.fillText(shop.cuisine || '', W / 2, 278);
     ctx.strokeStyle = '#d9bd85'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(370, 315); ctx.lineTo(710, 315); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(360, 312); ctx.lineTo(720, 312); ctx.stroke();
 
-    ctx.fillStyle = '#1f3a32'; ctx.font = '600 88px "Songti SC","STSong","SimSun",serif';
-    ctx.fillText('诚 邀 赴 宴', W / 2, 435);
-    ctx.fillStyle = '#4f4a40'; ctx.font = '34px sans-serif';
-    ctx.fillText((o.customerName || '贵客') + ' 及同席亲友', W / 2, 505);
-    ctx.fillStyle = '#1f3a32'; ctx.font = '600 60px "Songti SC","STSong","SimSun",serif';
-    ctx.fillText(D.fmtDateCN(o.date) + ' ' + D.weekdayCN(o.date) + ' ' + (o.time || ''), W / 2, 590);
-    ctx.fillStyle = '#6d6352'; ctx.font = '28px sans-serif';
-    ctx.fillText([roomName(o.roomId) || '包厢待定', (o.partySize || '') + ' 位', o.occasion || ''].filter(Boolean).join('  ·  '), W / 2, 645);
-    ctx.strokeStyle = 'rgba(184,137,63,.45)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(140, 692); ctx.lineTo(W - 140, 692); ctx.stroke();
+    ctx.fillStyle = '#1f3a32'; ctx.font = '600 86px "Songti SC","STSong","SimSun",serif';
+    ctx.fillText('诚 邀 赴 宴', W / 2, 432);
+    ctx.fillStyle = '#4f4a40'; ctx.font = '32px sans-serif';
+    ctx.fillText(truncate(orderName(o) || '贵客', 12) + ' 及同席亲友', W / 2, 498);
+    ctx.fillStyle = '#1f3a32'; ctx.font = '600 56px "Songti SC","STSong","SimSun",serif';
+    ctx.fillText(D.fmtDateCN(o.date) + ' ' + D.weekdayCN(o.date) + ' ' + (o.time || ''), W / 2, 586);
+    ctx.fillStyle = '#6d6352'; ctx.font = '27px sans-serif';
+    ctx.fillText([roomName(o.roomId) || '包厢待定', (o.partySize || '') + ' 位', o.occasion || ''].filter(Boolean).join('  ·  '), W / 2, 638);
+    if (o.special) {
+      ctx.fillStyle = '#a9721c'; ctx.font = '22px sans-serif';
+      ctx.fillText('特殊安排 · ' + truncate(o.special, 30), W / 2, 680);
+    }
+    ctx.strokeStyle = 'rgba(184,137,63,.42)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(140, 712); ctx.lineTo(W - 140, 712); ctx.stroke();
 
     ctx.fillStyle = '#b8893f'; ctx.font = '24px sans-serif';
-    ctx.fillText('当 日 菜 单', W / 2, 748);
+    ctx.fillText('当 日 菜 单', W / 2, 762);
     const dishes = (o.dishes || []).map((d) => (typeof d === 'string' ? d : d.name)).filter(Boolean);
     ctx.textAlign = 'left';
     dishes.slice(0, 10).forEach((name, i) => {
       const x = i < 5 ? 160 : 570;
-      const y = 812 + (i % 5) * 46;
+      const y = 822 + (i % 5) * 46;
       ctx.fillStyle = '#b8893f'; ctx.beginPath(); ctx.arc(x - 18, y - 9, 4, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#3d3a33'; ctx.font = '27px sans-serif';
       ctx.fillText(truncate(name, 12), x, y);
     });
     if (dishes.length > 10) {
       ctx.textAlign = 'center'; ctx.fillStyle = '#8a8070'; ctx.font = '22px sans-serif';
-      ctx.fillText('共 ' + dishes.length + ' 道菜', W / 2, 1040);
+      ctx.fillText('共 ' + dishes.length + ' 道菜', W / 2, 1062);
     }
 
-    let cursor = 1060;
-    if (o.special) {
-      roundRect(ctx, 130, cursor, 820, 80, 18);
-      ctx.fillStyle = '#fbf0dc'; ctx.fill();
-      ctx.strokeStyle = '#efd9ae'; ctx.lineWidth = 1; ctx.stroke();
-      ctx.textAlign = 'center'; ctx.fillStyle = '#a9721c'; ctx.font = '24px sans-serif';
-      ctx.fillText('特殊安排 · ' + truncate(o.special, 26), W / 2, cursor + 49);
-      cursor += 110;
+    const classic = D.classicDishes(S, 3);
+    let signY = 1100;
+    if (classic.length) {
+      ctx.textAlign = 'center'; ctx.fillStyle = '#b8893f'; ctx.font = '24px sans-serif';
+      ctx.fillText('经 典 菜 品', W / 2, 1096);
+      const cw = 280, gap = 20, totalW = classic.length * cw + (classic.length - 1) * gap;
+      classic.forEach((d, i) => {
+        const x = (W - totalW) / 2 + i * (cw + gap);
+        roundRect(ctx, x, 1120, cw, 126, 14);
+        ctx.fillStyle = '#f4eee3'; ctx.fill();
+        ctx.strokeStyle = '#e7ddca'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#1f3a32'; ctx.font = '600 28px "Songti SC","STSong","SimSun",serif';
+        ctx.fillText(truncate(d.name, 8), x + cw / 2, 1168);
+        ctx.fillStyle = '#8a8070'; ctx.font = '19px sans-serif';
+        ctx.fillText(truncate(d.note || '招牌必点', 12), x + cw / 2, 1204);
+      });
+      signY = 1290;
     }
 
-    const qrSize = 250;
-    const qrY = o.special ? 1200 : 1110;
+    // 店招广告位
+    roundRect(ctx, 90, signY, W - 180, 168, 18);
+    ctx.fillStyle = '#1b332c'; ctx.fill();
+    ctx.strokeStyle = '#c9a45c'; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e7d6ae'; ctx.font = '700 46px "Songti SC","STSong","SimSun",serif';
+    ctx.fillText(shop.shopName || '长季鲜', W / 2, signY + 66);
+    ctx.fillStyle = 'rgba(231,214,174,.85)'; ctx.font = '23px sans-serif';
+    ctx.fillText((shop.slogan || '时令海鲜 · 私厨家宴') + (shop.adText ? '　|　' + truncate(shop.adText, 18) : ''), W / 2, signY + 106);
+    ctx.fillStyle = 'rgba(231,214,174,.58)'; ctx.font = '19px sans-serif';
+    ctx.fillText('店招广告位 · 可替换为门店实景 / 合作广告', W / 2, signY + 142);
+
+    // 地址 + 导航
+    const nav = D.navUrlOf(shop);
+    let addrY = signY + 214;
+    ctx.fillStyle = '#4f4a40'; ctx.font = '25px sans-serif';
+    const addr = '地址：' + (shop.address || shop.shopName || '');
+    wrapLines(ctx, addr, W - 220, 2).forEach((line, i) => { ctx.fillText(line, W / 2, addrY + i * 34); });
+    if (!shop.address) {
+      ctx.fillStyle = '#a9721c'; ctx.font = '21px sans-serif';
+      ctx.fillText('（设置里填门店地址后，这里会自动显示并可一键导航）', W / 2, addrY + 34);
+      addrY += 34;
+    }
+
+    const qrY = addrY + 36, qrSize = 200;
     const qr = await makeQrCanvas(pageUrl('invite.html') + '?d=' + b64e(JSON.stringify(invitePayload(o))), qrSize);
-    if (qr) {
-      roundRect(ctx, W / 2 - 140, qrY - 20, 280, 280, 16);
-      ctx.fillStyle = '#fffdf9'; ctx.fill();
-      ctx.strokeStyle = '#d9bd85'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.drawImage(qr, W / 2 - 125, qrY, qrSize, qrSize);
-    } else {
-      ctx.fillStyle = '#8a8070'; ctx.font = '22px sans-serif'; ctx.textAlign = 'center';
+    const navQr = nav ? await makeQrCanvas(nav, qrSize) : null;
+    const boxes = [];
+    if (qr) boxes.push({ qr, label: '扫码回执 · 人数与忌口' });
+    if (navQr) boxes.push({ qr: navQr, label: '扫码导航 · 高德地图' });
+    boxes.forEach((b, i) => {
+      const cx = boxes.length === 1 ? W / 2 : (W / 2 + (i === 0 ? -165 : 165));
+      roundRect(ctx, cx - 120, qrY - 12, 240, 240, 16);
+      ctx.fillStyle = '#fffdf9'; ctx.fill(); ctx.strokeStyle = '#d9bd85'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.drawImage(b.qr, cx - 100, qrY + 8, qrSize, qrSize);
+      ctx.textAlign = 'center'; ctx.fillStyle = '#6d6352'; ctx.font = '19px sans-serif';
+      ctx.fillText(b.label, cx, qrY + 262);
+    });
+    if (!boxes.length) {
+      ctx.textAlign = 'center'; ctx.fillStyle = '#8a8070'; ctx.font = '22px sans-serif';
       ctx.fillText('在线回执请让主人家发链接', W / 2, qrY + 110);
     }
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#6d6352'; ctx.font = '22px sans-serif';
-    ctx.fillText('扫码回执 · 告知到场人数与忌口', W / 2, qrY + 302);
     ctx.fillStyle = '#8a8070'; ctx.font = '20px sans-serif';
-    ctx.fillText((shop.phone ? '订座 ' + shop.phone + '　' : '') + (shop.businessHours || ''), W / 2, qrY + 342);
+    ctx.fillText((shop.phone ? '订座 ' + shop.phone + '　' : '') + (shop.businessHours || '') + '　·　' + (shop.shopName || '长季鲜'), W / 2, H - 92);
     return c.toDataURL('image/png');
   }
   async function openInvitePoster(id) {
@@ -1604,29 +2032,52 @@
     copyText(msg);
   }
   function openInviteSheet(id) {
+    if (!can('invite')) { toast('邀请函由老板 / 店长发送'); return; }
     const o = alive(S.orders).find((x) => x.id === id); if (!o) return;
+    if (orderFlow(o) !== 'confirmed') {
+      confirmSheet('菜单还没确认', '客户还没确认菜品。现在发邀请函，之后改菜要重发一份。仍要生成吗？', '继续生成', () => doOpenInvite(o));
+      return;
+    }
+    doOpenInvite(o);
+  }
+  function doOpenInvite(o) {
     if (!o.inviteCode) {
       o.inviteCode = 'INV-' + D.uid('').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase();
       o.inviteAt = D.nowISO(); touch(o); S.meta.rev++;
       saveState();
     }
     const link = pageUrl('invite.html') + '?d=' + b64e(JSON.stringify(invitePayload(o)));
-    const msg = S.settings.shopName + ' 诚邀您 ' + D.fmtDateCN(o.date) + ' ' + o.time + ' 到店，' + (roomName(o.roomId) || '') + '，' + (o.partySize || '') + ' 位。\n邀请函：' + link + '\n请把链接转给同席亲友，方便提前准备忌口。';
-    openSheet('<h3>预定邀请函</h3><p class="sheet-sub">发给主客，主客再转给亲友；亲友在线回执后，忌口和到场人数会自动回到订单。</p>' +
+    const nav = D.navUrlOf(S.settings);
+    const addr = S.settings.address ? '\n地址：' + S.settings.address : '';
+    const navLine = nav ? '\n导航：' + nav : '';
+    const msg = S.settings.shopName + ' 诚邀您 ' + D.fmtDateCN(o.date) + ' ' + o.time + ' 到店，' + (roomName(o.roomId) || '') + '，' + (o.partySize || '') + ' 位。' + addr + navLine + '\n邀请函：' + link + '\n请把链接转给同席亲友，方便提前准备忌口。';
+    openSheet('<h3>预定邀请函</h3><p class="sheet-sub">确认菜单后发给主客，主客再转给亲友；邀请函带地址、一键导航和招牌菜。</p>' +
       '<button class="btn primary block mt8" data-act="invite-poster">' + I.share + ' 生成微信邀请函图片（不用点链接）</button>' +
-      '<div class="hint" style="margin:8px 0 10px">保存图片直接发微信，客人打开就能看；需要在线回执时再扫图里的二维码。</div>' +
+      '<div class="hint" style="margin:8px 0 10px">保存图片直接发微信，客人打开就能看；图里带回执二维码和导航二维码。</div>' +
       '<div class="share-link" id="inviteLinkText">' + esc(link) + '</div>' +
       '<div class="btn-row mt8"><button class="btn primary" data-act="share-invite" data-link="' + esc(link) + '" data-msg="' + esc(msg) + '">' + I.share + ' 分享到微信</button><button class="btn soft" data-act="preview-invite" data-link="' + esc(link) + '">预览</button></div>' +
       '<div class="btn-row mt8"><button class="btn soft" data-act="copy-invite" data-link="' + esc(link) + '">复制链接</button><button class="btn soft" data-act="copy-invite-msg" data-msg="' + esc(msg) + '">复制邀请话术</button></div>' +
       '<button class="btn ghost block mt8" data-act="import-rsvp">已收到回执码？点这里录入</button>' +
       '<button class="btn ghost block mt8" data-act="close-sheet">关闭</button>' +
-      '<div class="hint">' + (syncReady() ? '当前是云端同步模式，亲友提交回执会自动回写。' : '当前是本地模式：亲友提交后会生成一段回执码，复制回来在订单里录入即可。') + '</div>');
+      '<div class="hint">' + (syncReady() ? '当前是云端同步模式，亲友提交回执会自动回写。' : '当前是本地模式：亲友提交后会生成一段回执码，复制回来在订单里录入即可。') + (S.settings.address ? '' : ' 先在设置里填门店地址，邀请函会自动带定位和导航。') + '</div>');
   }
   function buildMenuPayload() {
     const sync = (window.CJXSync && window.CJXSync.isAuthed()) ? window.CJXSync.getConfig() : null;
-    // 云端模式只带同步配置，菜单页实时读取，链接短；本地模式才把菜单快照塞进链接
-    const dishes = sync ? [] : alive(S.dishes).filter((d) => d.status !== 'off').map((d) => ({ name: d.name, category: d.category, price: d.price, status: d.status, leadDays: d.leadDays, note: d.note, flavor: d.flavor }));
-    return { v: 1, t: 'menu', shop: { name: S.settings.shopName, cuisine: S.settings.cuisine, hours: S.settings.businessHours, phone: S.settings.phone }, dishes, updatedAt: D.nowISO(), sync: sync ? { url: sync.url, anonKey: sync.anonKey } : null };
+    // 云端模式只带同步配置，菜单页实时读取，链接短；本地模式把菜单快照塞进链接
+    // 本地模式用短字段名（n/c/p/s/l/e），链接能短一半以上，微信里更不容易被截断
+    const dishes = sync ? [] : alive(S.dishes).map((d) => {
+      const it = { n: d.name, c: d.category || '', p: Number(d.price) || 0 };
+      if (d.status && d.status !== 'on') it.s = d.status;
+      if (d.leadDays) it.l = d.leadDays;
+      if (d.note) it.e = d.note;
+      return it;
+    });
+    return {
+      v: 2, t: 'menu',
+      shop: { n: S.settings.shopName, c: S.settings.cuisine, h: S.settings.businessHours, p: S.settings.phone },
+      dishes: dishes, updatedAt: D.nowISO(),
+      sync: sync ? { url: sync.url, anonKey: sync.anonKey } : null
+    };
   }
   function roleEntryUrl(role) {
     try {
@@ -1639,7 +2090,38 @@
       return 'index.html?role=' + role;
     }
   }
+  const ROLE_PERMS_TEXT = {
+    boss: ['接单 · 审核 · 改菜单', 'AI 配菜 · 自动排包厢', '发客户 · 邀请函', '菜价只看，改价找店长'],
+    manager: ['上下架 · 改菜 · 改菜价', 'AI 配菜 · 自动排包厢', '备货单 · 审核 · 邀请函'],
+    kitchen: ['只看时令菜，不可修改', '看当日备货单', '看每桌点了什么'],
+    service: ['接待看板 · 包厢开台准备', '碗碟 / 酒壶 / 水 / 饮料勾选', '只看菜单，不可修改']
+  };
+  function saveRoleQr(role) {
+    const el = document.getElementById('qr_' + role);
+    const cv = el && el.querySelector('canvas');
+    if (!cv) { toast('二维码还没生成好，稍等一秒再点'); return; }
+    const W = 600, H = 760;
+    const out = document.createElement('canvas'); out.width = W; out.height = H;
+    const g = out.getContext('2d');
+    g.fillStyle = '#fffdf9'; g.fillRect(0, 0, W, H);
+    g.strokeStyle = '#e8dfcf'; g.lineWidth = 4; g.strokeRect(12, 12, W - 24, H - 24);
+    g.textAlign = 'center';
+    g.fillStyle = '#1f3a32'; g.font = '600 40px "Songti SC","STSong","SimSun",serif';
+    g.fillText(S.settings.shopName || '长季鲜', W / 2, 74);
+    g.fillStyle = '#8a8070'; g.font = '24px sans-serif';
+    g.fillText(ROLES[role].name + ' · 扫码进入', W / 2, 116);
+    g.drawImage(cv, 60, 142, 480, 480);
+    g.fillStyle = '#8a8070'; g.font = '19px sans-serif';
+    g.fillText('用手机相机 / 微信扫码', W / 2, 668);
+    g.fillText(roleEntryUrl(role).replace(/^https?:\/\//, '').slice(0, 42), W / 2, 702);
+    const a = document.createElement('a');
+    a.download = (S.settings.shopName || '长季鲜') + '-' + ROLES[role].name + '-入口.png';
+    a.href = out.toDataURL('image/png');
+    a.click();
+    toast('二维码已保存到相册/下载');
+  }
   function openRoleQrSheet() {
+    if (!can('roleQr')) { toast('角色入口二维码由老板 / 店长生成'); return; }
     const host = location.hostname || '';
     const badHost = location.protocol === 'file:' || host === 'localhost' || host === '127.0.0.1';
     const cards = Object.keys(ROLES).map((r) => {
@@ -1647,12 +2129,17 @@
       const url = roleEntryUrl(r);
       return '<div class="qr-card"><div class="qr-box" id="qr_' + r + '"></div><h4>' + ROLES[r].name + '</h4>' +
         '<p>' + (pin ? '已设密码' : '未设密码') + '</p>' +
-        '<button class="btn xs soft mt8" data-act="copy-role-link" data-url="' + esc(url) + '">复制链接</button></div>';
+        '<div class="perm-lines">' + ROLE_PERMS_TEXT[r].map((t) => '<span>' + esc(t) + '</span>').join('') + '</div>' +
+        '<div class="btn-row" style="gap:6px;margin-top:8px"><button class="btn xs soft grow" data-act="copy-role-link" data-url="' + esc(url) + '">复制链接</button><button class="btn xs soft grow" data-act="save-role-qr" data-role="' + r + '">保存图片</button></div></div>';
     }).join('');
-    openSheet('<h3>角色入口二维码</h3><p class="sheet-sub">每个角色一张，用微信扫对应二维码就直接进入身份；手机记住后，下次不用再选。</p>' +
-      (badHost ? '<div class="alert-line" style="margin-bottom:10px">' + I.alert + '<div><b>当前地址手机扫不到。</b>请先部署到 GitHub Pages/自己的域名，或用电脑局域网 IP 打开本应用后再生成二维码。</div></div>' : '') +
+    openSheet('<h3>角色入口二维码</h3><p class="sheet-sub">4 个角色 4 张码，各进各的权限。老板 / 店长可改菜单，后厨与服务员只读。</p>' +
+      (badHost ? '<div class="alert-line" style="margin-bottom:10px">' + I.alert + '<div><b>当前地址手机扫不到。</b>请先部署到线上，或用电脑局域网 IP 打开本应用后再生成二维码。</div></div>' : '') +
       '<div class="qr-grid">' + cards + '</div>' +
-      '<div class="hint">这是角色入口，不是微信实名认证。谁拿到链接都能进入对应角色；老板/店长建议在设置里设 4 位密码。店员扫码后，建议在微信里收藏或浮窗，下次直接打开。</div>' +
+      '<div class="perm-table"><div class="pt-head"><span>权限</span><span>老板</span><span>店长</span><span>后厨</span><span>服务员</span></div>' +
+        [['修改菜单', 1, 1, 0, 0], ['上下架时令菜', 1, 1, 0, 0], ['修改菜价', 0, 1, 0, 0], ['AI 配菜 + 排包厢', 1, 1, 0, 0], ['备货单', 1, 1, 1, 0], ['开台准备勾选', 1, 1, 0, 1], ['邀请函 / 发客户', 1, 1, 0, 0]].map((row) =>
+          '<div class="pt-row"><span>' + row[0] + '</span>' + row.slice(1).map((v) => '<span class="' + (v ? 'yes' : 'no') + '">' + (v ? '✓' : '—') + '</span>').join('') + '</div>').join('') +
+      '</div>' +
+      '<div class="hint">这是角色入口，不是实名认证。谁拿到链接都能进对应角色；老板 / 店长建议在设置里设 4 位密码。店员扫码后建议在微信里收藏，下次直接打开。</div>' +
       '<button class="btn ghost block mt8" data-act="close-sheet">关闭</button>');
     if (typeof QRCode === 'undefined') {
       document.querySelectorAll('.qr-box').forEach((el) => { el.innerHTML = '<span class="tiny muted">二维码库未加载</span>'; });
@@ -1668,9 +2155,11 @@
   }
   function openMenuShareSheet() {
     const link = pageUrl('menu.html') + '?d=' + b64e(JSON.stringify(buildMenuPayload()));
+    const longLink = link.length > 3000;
     openSheet('<h3>时令菜单链接</h3><p class="sheet-sub">发给熟客，客人自己看在售、需预订和下市，不用老板反复传话。</p>' +
       '<div class="share-link">' + esc(link) + '</div><div class="btn-row mt8"><button class="btn primary" data-act="copy-menu-link" data-link="' + esc(link) + '">复制链接</button><button class="btn soft" data-act="copy-menu-text">复制文字版</button></div>' +
       '<button class="btn ghost block mt8" data-act="close-sheet">关闭</button>' +
+      (longLink ? '<div class="alert-line" style="margin-top:10px">' + I.alert + '<div><b>本地模式链接较长（' + Math.round(link.length / 1024) + 'KB）。</b>微信里发长链接偶尔会被截断，重要客人建议先发「复制文字版」，或把应用部署到线上用云端模式（链接只有几百字符）。</div></div>' : '') +
       '<div class="hint">链接里只有菜名、价格和状态，不含任何客人信息。' + (syncReady() ? '云端模式下菜单页会实时读取最新菜品。' : '本地模式下是生成时的快照，菜品变动后重新生成一次。') + '</div>');
   }
   function menuText() {
@@ -1727,7 +2216,7 @@
         if (!st || !st.orders) throw new Error('不是长季鲜备份文件');
         confirmSheet('导入备份？', '会覆盖这台设备当前的 ' + alive(S.orders).length + ' 张订单和 ' + alive(S.customers).length + ' 位熟客。', '确认导入', () => {
           S = migrate(st); S.meta.rev++; S.meta.updatedAt = D.nowISO();
-          saveState({ noPush: true }); closeSheet(); render(); toast('备份已导入');
+          saveState({ noPush: true, snap: true }); closeSheet(); render(); toast('备份已导入');
         });
       } catch (e) { toast('导入失败：' + e.message); }
     };
@@ -1782,8 +2271,12 @@
     const act = el.dataset.act;
     const id = el.dataset.id;
     switch (act) {
-      case 'load-demo': D.seedDemo(S); S.meta.onboarded = true; saveState({ noPush: true }); ui.view = 'gate'; render(); toast('示例数据已载入，选择角色体验'); break;
-      case 'start-blank': S.meta.onboarded = true; S.orders = []; S.customers = []; S.rsvps = []; S.rooms = D.defaultRooms(); S.dishes = D.defaultDishes(); saveState({ noPush: true }); ui.view = 'gate'; render(); break;
+      case 'load-demo': loadDemoScript().then(function () {
+        seedDemo(S); S.meta.onboarded = true;
+        saveState({ noPush: true, snap: true });
+        ui.view = 'gate'; render(); toast('示例数据已载入，选择角色体验');
+      }).catch(function () { toast('示例数据没加载成功，请连网后重试'); }); break;
+      case 'start-blank': S.meta.onboarded = true; S.orders = []; S.customers = []; S.rsvps = []; S.rooms = D.defaultRooms(); S.dishes = D.defaultDishes(); saveState({ noPush: true, snap: true }); ui.view = 'gate'; render(); break;
       case 'pick-role': requestRole(el.dataset.role); break;
       case 'pin-ok': {
         const role = el.dataset.role; const v = (($('#pinInput') || {}).value || '').trim();
@@ -1817,11 +2310,11 @@
         const o = alive(S.orders).find((x) => x.id === id); if (!o) break;
         o.status = 'cancelled'; o.audit = o.audit || {}; o.audit.cancelledAt = D.nowISO(); o.audit.cancelReason = (($('#cancelReason') || {}).value || '').trim();
         addLog(o, '取消预定' + (o.audit.cancelReason ? '：' + o.audit.cancelReason : '')); touch(o); S.meta.rev++;
-        saveState(); closeSheet(); render({ scroll: false }); toast('订单已取消'); break;
+        saveState({ snap: true }); closeSheet(); render({ scroll: false }); toast('订单已取消'); break;
       }
       case 'delete-order': {
         const o = alive(S.orders).find((x) => x.id === ui.params.orderId); if (!o) break;
-        confirmSheet('删除这张订单？', '删除后不会出现在台账里，建议优先用「取消」。', '确认删除', () => { o.deleted = true; touch(o); S.meta.rev++; saveState(); closeSheet(); ui.stack = [{ view: 'orders', params: {} }]; go('orders'); toast('已删除'); }, true); break;
+        confirmSheet('删除这张订单？', '删除后不会出现在台账里，建议优先用「取消」。', '确认删除', () => { o.deleted = true; touch(o); S.meta.rev++; saveState({ snap: true }); closeSheet(); ui.stack = [{ view: 'orders', params: {} }]; go('orders'); toast('已删除'); }, true); break;
       }
       case 'duplicate-order': {
         const o = alive(S.orders).find((x) => x.id === ui.params.orderId); if (!o) break;
@@ -1867,7 +2360,7 @@
         const key = el.dataset.key;
         const item = SERVICE_CHECKS.find((k) => k.key === key);
         if (!item) break;
-        o.serviceChecks = Object.assign({ tableware: false, pitcher: false, water: false }, o.serviceChecks || {});
+        o.serviceChecks = Object.assign({ tableware: false, pitcher: false, water: false, drink: false }, o.serviceChecks || {});
         o.serviceChecks[key] = !o.serviceChecks[key];
         addLog(o, '开台准备：' + item.label + (o.serviceChecks[key] ? ' 已备好' : ' 取消'));
         touch(o); S.meta.rev++; saveState(); render({ scroll: false });
@@ -1949,8 +2442,62 @@
         render({ scroll: false }); toast('已带入熟客信息');
         break;
       }
-      case 'gen-menu': closeSheet(); openMenuPlanner(); break;
+      case 'gen-menu': closeSheet(); openMenuPlanner(ui.menuTarget === 'order' ? 'order' : 'form'); break;
+      case 'ai-menu': openMenuPlanner('order'); break;
       case 'adopt-menu': adoptMenu(el.dataset.key); break;
+      case 'flow-manager': {
+        const o = alive(S.orders).find((x) => x.id === ui.params.orderId); if (!o) break;
+        openForwardSheet(o, 'manager', '转给店长配菜', '复制这段话发给店长，订单会自动进入店长的「待我配菜」。', handoffText(o));
+        break;
+      }
+      case 'flow-boss': {
+        const o = alive(S.orders).find((x) => x.id === ui.params.orderId); if (!o) break;
+        if (!(o.dishes || []).length) { toast('还没有菜单，先 AI 配菜'); break; }
+        openForwardSheet(o, 'boss', '菜单发给老板确认', '老板看完没问题，再转发给客户确认。', menuTextForBoss(o));
+        break;
+      }
+      case 'flow-customer': {
+        const o = alive(S.orders).find((x) => x.id === ui.params.orderId); if (!o) break;
+        if (!(o.dishes || []).length) { toast('还没有菜单，先 AI 配菜'); break; }
+        openForwardSheet(o, 'customer', '菜单发给客户确认', '客户看完回复「可以」或提出改菜，再点「客户已确认」。', menuTextForCustomer(o));
+        break;
+      }
+      case 'copy-forward': {
+        const o = alive(S.orders).find((x) => x.id === el.dataset.id); if (!o) break;
+        copyText(el.dataset.text || '');
+        setFlow(o, el.dataset.stage || 'manager');
+        S.meta.rev++;
+        saveState({ snap: true });
+        closeSheet(); render({ scroll: false });
+        toast('已复制，流程已前进一步');
+        break;
+      }
+      case 'flow-confirm': {
+        const o = alive(S.orders).find((x) => x.id === ui.params.orderId); if (!o) break;
+        confirmSheet('客户已确认菜单？', '确认后流程走到「已确认」，就可以生成邀请函发给客户了。', '确认已确认', () => {
+          o.menuConfirmed = true;
+          o.menuConfirmedAt = D.nowISO();
+          setFlow(o, 'confirmed');
+          S.meta.rev++;
+          saveState({ snap: true });
+          closeSheet(); render({ scroll: false });
+          toast('已确认，可以发邀请函了');
+        });
+        break;
+      }
+      case 'save-role-qr': saveRoleQr(el.dataset.role); break;
+      case 'copy-prep-one': {
+        const o = alive(S.orders).find((x) => x.id === el.dataset.id); if (!o) break;
+        copyText(servicePrepText(o));
+        break;
+      }
+      case 'copy-board-prep': {
+        const date = ui.boardDate || D.todayStr();
+        const list = alive(S.orders).filter((o) => o.date === date && ['confirmed', 'notified'].includes(o.status)).sort((a, b) => a.time.localeCompare(b.time));
+        if (!list.length) { toast('这一天没有已确认的预定'); break; }
+        copyText(S.settings.shopName + ' · ' + D.fmtDateCN(date) + ' 开台准备\n\n' + list.map((o) => servicePrepText(o, true)).join('\n\n'));
+        break;
+      }
       case 'save-order': saveOrderForm(); break;
       case 'cancel-form': ui.form = null; back(); break;
       case 'open-invite': openInviteSheet(ui.params.orderId); break;
@@ -1996,24 +2543,31 @@
         S.settings.businessHours = (($('#setHours') || {}).value || '').trim();
         S.settings.address = (($('#setAddress') || {}).value || '').trim();
         S.settings.phone = (($('#setPhone') || {}).value || '').trim();
-        touchSettings(); S.meta.rev++; saveState(); render({ scroll: false }); toast('门店信息已保存');
+        S.settings.slogan = (($('#setSlogan') || {}).value || '').trim();
+        S.settings.adText = (($('#setAdText') || {}).value || '').trim();
+        S.settings.lat = (($('#setLat') || {}).value || '').trim();
+        S.settings.lng = (($('#setLng') || {}).value || '').trim();
+        touchSettings(); S.meta.rev++; saveState({ snap: true }); render({ scroll: false }); toast('门店信息已保存');
         break;
       }
       case 'save-rooms': {
         alive(S.rooms).forEach((r) => {
-          const n = $('#roomName_' + r.id); const s = $('#roomSeats_' + r.id); const e = $('#roomOn_' + r.id);
+          const n = $('#roomName_' + r.id); const mn = $('#roomMin_' + r.id); const mx = $('#roomMax_' + r.id); const e = $('#roomOn_' + r.id);
           if (n) r.name = n.value.trim() || r.name;
-          if (s) r.seats = Number(s.value) || r.seats;
+          if (mx) r.maxSeats = Math.max(1, Number(mx.value) || r.maxSeats || r.seats || 10);
+          if (mn) r.minSeats = Math.max(1, Number(mn.value) || r.minSeats || 1);
+          if (r.minSeats && r.maxSeats && r.minSeats > r.maxSeats) { const t = r.minSeats; r.minSeats = r.maxSeats; r.maxSeats = t; }
+          r.seats = r.maxSeats || r.seats;
           if (e) r.enabled = e.checked;
           touch(r);
         });
-        S.meta.rev++; saveState(); render({ scroll: false }); toast('包厢已保存');
+        S.meta.rev++; saveState({ snap: true }); render({ scroll: false }); toast('包厢已保存');
         break;
       }
       case 'add-room': {
         if (alive(S.rooms).length >= 6) { toast('最多 6 个包厢'); break; }
-        S.rooms.push({ id: D.uid('r_'), name: 'VIP' + (alive(S.rooms).length + 1), seats: 10, sort: alive(S.rooms).length + 1, enabled: true, note: '', updatedAt: D.nowISO(), deleted: false, _dirty: true });
-        S.meta.rev++; saveState(); render({ scroll: false }); break;
+        S.rooms.push({ id: D.uid('r_'), name: 'VIP' + (alive(S.rooms).length + 1), minSeats: 10, maxSeats: 12, seats: 12, sort: alive(S.rooms).length + 1, enabled: true, note: '', updatedAt: D.nowISO(), deleted: false, _dirty: true });
+        S.meta.rev++; saveState({ snap: true }); render({ scroll: false }); break;
       }
       case 'save-pins': {
         const pins = {};
@@ -2023,7 +2577,7 @@
           pins[k] = v;
         });
         if (pins.__bad) break;
-        S.settings.pins = pins; touchSettings(); S.meta.rev++; saveState(); toast('角色密码已保存');
+        S.settings.pins = pins; touchSettings(); S.meta.rev++; saveState({ snap: true }); toast('角色密码已保存');
         break;
       }
       case 'cloud-setup': openCloudSheet(); break;
@@ -2031,7 +2585,7 @@
       case 'cloud-back': openCloudSheet(); break;
       case 'copy-sql': copySetupSql(); break;
       case 'cloud-login': doCloudLogin(); break;
-      case 'cloud-logout': confirmSheet('退出同步账号？', '本机数据会保留，但不再和云端同步。', '退出', () => { window.CJXSync.logout(); closeSheet(); render({ scroll: false }); toast('已退出同步'); }, true); break;
+      case 'cloud-logout': confirmSheet('退出同步账号？', '本机数据会保留，但不再和云端同步。', '退出', () => { window.CJXSync.logout(); resetPullCursor(); closeSheet(); render({ scroll: false }); toast('已退出同步'); }, true); break;
       case 'cloud-sync': syncPull(true); break;
       case 'export-data': exportData(); break;
       case 'import-data': { const f = $('#importFile'); if (f) f.click(); break; }
@@ -2041,11 +2595,15 @@
         const snaps = snapshots(); const snap = snaps[Number(el.dataset.idx)];
         if (!snap) break;
         confirmSheet('恢复这份快照？', String(snap.at).replace('T', ' ').slice(0, 16) + ' · ' + (snap.state.orders || []).length + ' 张订单', '确认恢复', () => {
-          S = migrate(JSON.parse(JSON.stringify(snap.state))); S.meta.rev++; saveState({ noPush: true }); closeSheet(); render(); toast('已恢复快照');
+          S = migrate(JSON.parse(JSON.stringify(snap.state))); S.meta.rev++; saveState({ noPush: true, noSnap: true }); closeSheet(); render(); toast('已恢复快照');
         });
         break;
       }
-      case 'reload-demo': confirmSheet('载入示例数据？', '会覆盖当前订单、熟客和菜品，用于演示和熟悉系统。', '载入示例', () => { D.seedDemo(S); saveState({ noPush: true }); closeSheet(); render(); toast('示例数据已载入'); }, true); break;
+      case 'reload-demo': confirmSheet('载入示例数据？', '会覆盖当前订单、熟客和菜品，用于演示和熟悉系统。', '载入示例', function () {
+        loadDemoScript().then(function () {
+          seedDemo(S); saveState({ noPush: true, snap: true }); closeSheet(); render(); toast('示例数据已载入');
+        }).catch(function () { toast('示例数据没加载成功，请连网后重试'); });
+      }, true); break;
       case 'reset-all': confirmSheet('清空所有数据？', '订单、熟客、菜品都会恢复默认，且不能撤销。建议先导出备份。', '确认清空', () => {
         localStorage.removeItem(LS_STATE); localStorage.removeItem(LS_SNAPS); localStorage.removeItem(LS_SESSION);
         localStorage.removeItem('cjx_sync_v1'); location.reload();
@@ -2105,6 +2663,7 @@
     try {
       toast('正在登录…');
       await window.CJXSync.login(url, key, email, password);
+      resetPullCursor();   // 换了账号/项目，游标作废，先全量对齐
       closeSheet();
       toast('登录成功，开始同步');
       await syncPull(false);
@@ -2114,11 +2673,18 @@
   }
   function openHelpSheet() {
     openSheet('<h3>长季鲜 · 一页纸使用说明</h3>' +
-      '<div class="notice" style="line-height:1.8"><b>老板</b>：把客人微信聊天粘到「新建预定 → 微信聊天一键识别」，核对后保存；只有人数和餐标时点「按餐标配菜」，系统会按预算、时令和熟客口味出三套菜单。<br><br>' +
-      '<b>店长</b>：在首页看「待审核」，点进去审核通过并通知；改单后会自动回到待审核。备货页按日期汇总，一键复制给厨师。<br><br>' +
-      '<b>后厨</b>：每天花 1 分钟，在「时令菜」里点在售/预订/下市；客人菜单和配菜会立刻跟着变。<br><br>' +
-      '<b>服务员</b>：看板按时间列出每桌忌口和特殊安排，亲友回执的忌口会单独标红。<br><br>' +
-      '<b>邀请函</b>：订单确认后点「生成/发送邀请函」，发给主客，主客转给亲友；云端模式下亲友回执自动回写，本地模式会生成回执码。</div>' +
+      '<div class="notice" style="line-height:1.85"><b>一条预定的完整走法</b><br>' +
+      '① 老板接单，把客人微信聊天粘到「新建预定 → 微信聊天一键识别」，核对后保存。<br>' +
+      '② 订单里点「转给店长配菜」，复制话术发给店长；店长首页会出现「待我配菜」。<br>' +
+      '③ 店长点「AI 自动配菜 + 排包厢」：只要有<b>人数 + 餐标</b>，系统出三套菜单，并按人数自动排包厢（VIP1/VIP2 坐 10–12 人，VIP3 坐 15–18 人）。<br>' +
+      '④ 店长「发给老板确认」→ 老板「转发给客户确认」→ 客户回话后点「客户已确认菜品」。<br>' +
+      '⑤ 老板或店长「生成/发送邀请函」：带地址、导航二维码、店招广告位和经典菜品，客户可转给同席亲友回执。<br><br>' +
+      '<b>权限</b><br>' +
+      '老板：接单、审核、改菜单、上下架、AI 配菜、发客户、邀请函。<b>菜价只有店长能改</b>。<br>' +
+      '店长：上下架、改菜、改菜价、AI 配菜、备货单、审核、邀请函。<br>' +
+      '后厨：只看时令菜和备货单，不能改。<br>' +
+      '服务员：看板看包厢、人数和忌口，碗碟 / 酒壶 / 矿泉水 / 饮料按人数自动算量，勾选即可。<br><br>' +
+      '<b>熟客沉淀</b><br>每次预定和完成都会把忌口、口味、常点菜记进档案，下次配菜自动避开忌口。同姓客人按手机尾号区分，不会串档。</div>' +
       '<button class="btn primary block mt12" data-act="close-sheet">知道了</button>');
   }
 
@@ -2177,16 +2743,21 @@
   });
 
   /* ---------- 启动 ---------- */
-  (function bootQuery() {
+  async function bootQuery() {
     try {
       const q = new URLSearchParams(location.search);
       if (q.get('reset') === '1') {
         localStorage.removeItem(LS_STATE); localStorage.removeItem(LS_SNAPS); localStorage.removeItem(LS_SESSION);
+        localStorage.removeItem(LS_CURSOR);
+        pullCursor = '';
         S = loadState();
       }
       if (q.get('demo') === '1' && !S.meta.seeded) {
-        D.seedDemo(S); S.meta.onboarded = true;
-        saveState({ noPush: true, noSnap: true });
+        try {
+          await loadDemoScript();
+          seedDemo(S); S.meta.onboarded = true;
+          saveState({ noPush: true, noSnap: true });
+        } catch (e) { toast('示例数据没加载成功，请连网后重试'); }
       }
       const r = q.get('role');
       if (r && ROLES[r]) {
@@ -2205,27 +2776,30 @@
         }
       }
     } catch (e) { }
-  })();
-  attachRsvps();
-  render();
-  if (ui.autoPinRole) {
-    const pinRole = ui.autoPinRole;
-    ui.autoPinRole = null;
-    setTimeout(() => openPinSheet(pinRole), 180);
   }
-  if (syncReady()) setTimeout(() => syncPull(false), 700);
-  setInterval(() => {
-    if (session && ui.view === 'board') render({ scroll: false });
-  }, 30000);
-  setInterval(() => {
-    if (session && syncReady() && document.visibilityState === 'visible' && !ui.busy) syncPull(false);
-  }, 22000);
-  document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible' && syncReady()) syncPull(false);
-  });
-  window.addEventListener('online', function () { if (syncReady()) { toast('网络已恢复，正在同步'); syncPull(false); } });
-  window.addEventListener('offline', function () { toast('当前离线，数据先存在本机'); });
-  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
-    window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => { }); });
+  function startApp() {
+    attachRsvps();
+    render();
+    if (ui.autoPinRole) {
+      const pinRole = ui.autoPinRole;
+      ui.autoPinRole = null;
+      setTimeout(() => openPinSheet(pinRole), 180);
+    }
+    if (syncReady()) setTimeout(() => syncPull(false), 700);
+    setInterval(() => {
+      if (session && ui.view === 'board') render({ scroll: false });
+    }, 30000);
+    setInterval(() => {
+      if (session && syncReady() && document.visibilityState === 'visible' && !ui.busy) syncPull(false);
+    }, 22000);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && syncReady()) syncPull(false);
+    });
+    window.addEventListener('online', function () { if (syncReady()) { toast('网络已恢复，正在同步'); syncPull(false); } });
+    window.addEventListener('offline', function () { toast('当前离线，数据先存在本机'); });
+    if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+      navigator.serviceWorker.register('./sw.js').catch(() => { });
+    }
   }
+  bootQuery().then(startApp, startApp);
 })();

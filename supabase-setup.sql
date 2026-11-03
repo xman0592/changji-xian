@@ -110,6 +110,10 @@ create index if not exists cjx_orders_date_idx on public.cjx_orders (date);
 create index if not exists cjx_orders_updated_idx on public.cjx_orders (updated_at);
 create index if not exists cjx_rsvps_order_idx on public.cjx_rsvps (order_id);
 create index if not exists cjx_dishes_updated_idx on public.cjx_dishes (updated_at);
+-- 增量同步要用 updated_at / submitted_at 做 gt 过滤，这几张表也要有索引
+create index if not exists cjx_customers_updated_idx on public.cjx_customers (updated_at);
+create index if not exists cjx_rooms_updated_idx on public.cjx_rooms (updated_at);
+create index if not exists cjx_rsvps_submitted_idx on public.cjx_rsvps (submitted_at);
 
 -- ========== 2. 行级权限 ==========
 alter table public.cjx_rooms enable row level security;

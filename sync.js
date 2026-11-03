@@ -106,21 +106,41 @@
     return data;
   }
 
-  async function pullAll() {
+  function isoMax(a, b) {
+    if (!a) return b || '';
+    if (!b) return a || '';
+    return String(a) > String(b) ? a : b;
+  }
+
+  async function pullAll(opts) {
     const get = (path) => rest(path, { method: 'GET' });
+    const since = (opts && opts.since) || '';
+    // 时钟偏差兜底：往回多看一段，重叠部分由 mergeRemote 幂等丢弃
+    const overlap = Number((opts && opts.overlap) || 0);
+    let from = since;
+    if (since && overlap > 0) {
+      const t = Date.parse(since);
+      if (!isNaN(t)) from = new Date(t - overlap * 1000).toISOString();
+    }
+    const q = from ? '&updated_at=gt.' + encodeURIComponent(from) : '';
+    const qr = from ? '&submitted_at=gt.' + encodeURIComponent(from) : '';
     const out = await Promise.all([
-      get('cjx_rooms?select=*'),
-      get('cjx_dishes?select=*'),
-      get('cjx_customers?select=*'),
-      get('cjx_orders?select=*'),
-      get('cjx_rsvps?select=*'),
-      get('cjx_settings?select=*&id=eq.1')
+      get('cjx_rooms?select=*' + q),
+      get('cjx_dishes?select=*' + q),
+      get('cjx_customers?select=*' + q),
+      get('cjx_orders?select=*' + q),
+      get('cjx_rsvps?select=*' + qr),
+      get('cjx_settings?select=*&id=eq.1' + q)
     ]);
+    const rows = [].concat(out[0] || [], out[1] || [], out[2] || [], out[3] || [], out[4] || [], out[5] || []);
+    let cursor = since;
+    rows.forEach((r) => { cursor = isoMax(cursor, r && (r.updated_at || r.submitted_at)); });
     lastSyncAt = new Date().toISOString();
     lastError = '';
     return {
       rooms: out[0] || [], dishes: out[1] || [], customers: out[2] || [],
-      orders: out[3] || [], rsvps: out[4] || [], settings: out[5] || []
+      orders: out[3] || [], rsvps: out[4] || [], settings: out[5] || [],
+      since: from || '', _cursor: cursor || ''
     };
   }
 
