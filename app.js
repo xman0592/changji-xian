@@ -147,6 +147,21 @@
   function syncReady() { return !!(window.CJXSync && window.CJXSync.isAuthed()); }
   function cloudConfigured() { return !!(window.CJXSync && window.CJXSync.isConfigured()); }
   function pageUrl(file) { try { return new URL(file, location.href).href; } catch (e) { return file; } }
+  // 托管平台（app.workbuddy.host）用 sharecode 做访问凭证：任何不带它的链接都会 403「链接不完整」。
+  // 生成二维码 / 菜单链接 / 邀请函链接时必须把它带上，否则别人的手机打不开。
+  function shareCode() {
+    try { return new URLSearchParams(location.search).get('sharecode') || ''; } catch (e) { return ''; }
+  }
+  function pageLink(file, params) {
+    try {
+      const u = new URL(file, location.href);
+      u.hash = '';
+      const sc = shareCode();
+      if (sc) u.searchParams.set('sharecode', sc);
+      Object.keys(params || {}).forEach((k) => u.searchParams.set(k, String(params[k])));
+      return u.href;
+    } catch (e) { return file; }
+  }
 
   /* ---------- 状态 ---------- */
   let S = loadState();
@@ -1978,7 +1993,7 @@
     }
 
     const qrY = addrY + 36, qrSize = 200;
-    const qr = await makeQrCanvas(pageUrl('invite.html') + '?d=' + b64e(JSON.stringify(invitePayload(o))), qrSize);
+    const qr = await makeQrCanvas(pageLink('invite.html', { d: b64e(JSON.stringify(invitePayload(o))) }), qrSize);
     const navQr = nav ? await makeQrCanvas(nav, qrSize) : null;
     const boxes = [];
     if (qr) boxes.push({ qr, label: '扫码回执 · 人数与忌口' });
@@ -2046,7 +2061,7 @@
       o.inviteAt = D.nowISO(); touch(o); S.meta.rev++;
       saveState();
     }
-    const link = pageUrl('invite.html') + '?d=' + b64e(JSON.stringify(invitePayload(o)));
+    const link = pageLink('invite.html', { d: b64e(JSON.stringify(invitePayload(o))) });
     const nav = D.navUrlOf(S.settings);
     const addr = S.settings.address ? '\n地址：' + S.settings.address : '';
     const navLine = nav ? '\n导航：' + nav : '';
@@ -2081,10 +2096,13 @@
   }
   function roleEntryUrl(role) {
     try {
-      const u = new URL('index.html', location.href);
-      u.search = '';
+      // 用当前地址克隆，保留 sharecode（托管平台的访问凭证），只换 role
+      const u = new URL(location.href);
       u.hash = '';
+      ['reset', 'demo', 'd', 'role'].forEach((k) => u.searchParams.delete(k));
       u.searchParams.set('role', role);
+      const sc = shareCode();
+      if (sc) u.searchParams.set('sharecode', sc);
       return u.href;
     } catch (e) {
       return 'index.html?role=' + role;
@@ -2113,7 +2131,8 @@
     g.drawImage(cv, 60, 142, 480, 480);
     g.fillStyle = '#8a8070'; g.font = '19px sans-serif';
     g.fillText('用手机相机 / 微信扫码', W / 2, 668);
-    g.fillText(roleEntryUrl(role).replace(/^https?:\/\//, '').slice(0, 42), W / 2, 702);
+    const shownUrl = roleEntryUrl(role).replace(/^https?:\/\//, '').split('?')[0] + '?role=' + role;
+    g.fillText(shownUrl.slice(0, 44), W / 2, 702);
     const a = document.createElement('a');
     a.download = (S.settings.shopName || '长季鲜') + '-' + ROLES[role].name + '-入口.png';
     a.href = out.toDataURL('image/png');
@@ -2154,7 +2173,7 @@
     });
   }
   function openMenuShareSheet() {
-    const link = pageUrl('menu.html') + '?d=' + b64e(JSON.stringify(buildMenuPayload()));
+    const link = pageLink('menu.html', { d: b64e(JSON.stringify(buildMenuPayload())) });
     const longLink = link.length > 3000;
     openSheet('<h3>时令菜单链接</h3><p class="sheet-sub">发给熟客，客人自己看在售、需预订和下市，不用老板反复传话。</p>' +
       '<div class="share-link">' + esc(link) + '</div><div class="btn-row mt8"><button class="btn primary" data-act="copy-menu-link" data-link="' + esc(link) + '">复制链接</button><button class="btn soft" data-act="copy-menu-text">复制文字版</button></div>' +
