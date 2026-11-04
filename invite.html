@@ -3,108 +3,94 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1f3a32">
-<meta name="description" content="长季鲜私房菜邀请函：查看时间、包厢和菜单，在线回复到场人数与忌口。">
+<meta name="theme-color" content="#14261f">
+<meta name="description" content="长季鲜私房菜邀请函：谨订信息、当日菜单、招牌菜与环境展示，一键导航到店。">
 <meta property="og:title" content="长季鲜 · 邀请函">
-<meta property="og:description" content="诚邀您共赴晚宴，请回复到场人数和忌口。">
+<meta property="og:description" content="诚邀您共赴私宴，恭候台光。">
 <meta property="og:type" content="website">
 <title>长季鲜 · 邀请函</title>
 <style>
   :root { --ink:#1f3a32; --ink2:#2e5a4b; --gold:#b8893f; --gold2:#d9bd85; --cream:#f7f3ea; --paper:#fbf8f1; --line:#e7ddca; --muted:#8a8070; --red:#a63f36; --amber:#a9721c; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body { margin:0; padding:0; }
-  body { font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif; background:radial-gradient(900px 500px at 50% -8%,#315c4c,#152a24 70%); color:#2b2a26; font-size:15px; line-height:1.6; min-height:100vh; }
-  .page { max-width:560px; margin:0 auto; padding:26px 16px 50px; }
-  .brand { text-align:center; color:var(--cream); font-family:"Songti SC","STSong","SimSun",serif; font-size:27px; letter-spacing:7px; font-weight:600; }
-  .brand small { display:block; font-size:10.5px; letter-spacing:3px; color:rgba(231,214,174,.62); margin-top:5px; font-family:inherit; }
-  .invite { margin-top:18px; background:var(--paper); border-radius:22px; overflow:hidden; box-shadow:0 24px 70px rgba(8,18,14,.4); border:1px solid rgba(217,189,133,.4); }
-  .invite-head { background:linear-gradient(145deg,#1b332c,#2c5345 60%,#3a6855); color:var(--cream); text-align:center; padding:30px 22px 26px; position:relative; overflow:hidden; }
-  .invite-head::before { content:"宴"; position:absolute; right:-8px; bottom:-40px; font-family:"Songti SC","STSong","SimSun",serif; font-size:120px; color:rgba(231,214,174,.06); }
-  .invite-head .kicker { font-size:11px; letter-spacing:5px; color:var(--gold2); }
-  .invite-head h1 { font-family:"Songti SC","STSong","SimSun",serif; font-size:30px; letter-spacing:3px; margin:10px 0 6px; font-weight:600; }
-  .invite-head p { margin:0; font-size:12.5px; color:rgba(247,243,234,.68); letter-spacing:1px; }
-  .invite-body { padding:22px 22px 24px; }
-  .greet { text-align:center; font-family:"Songti SC","STSong","SimSun",serif; font-size:16px; color:var(--ink); letter-spacing:1px; }
-  .when { text-align:center; margin:14px 0 4px; font-family:"Songti SC","STSong","SimSun",serif; font-size:27px; color:var(--ink); letter-spacing:1px; }
-  .when small { display:block; font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; font-size:12px; color:var(--muted); letter-spacing:1px; margin-top:4px; }
-  .facts { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:18px 0; }
-  .fact { background:#f4eee3; border-radius:12px; padding:10px 12px; }
-  .fact span { display:block; font-size:10.5px; color:var(--muted); letter-spacing:1px; }
-  .fact b { display:block; font-size:14.5px; font-weight:500; color:var(--ink); margin-top:2px; }
-  .divider { height:1px; background:linear-gradient(90deg,transparent,var(--gold),transparent); opacity:.55; margin:18px 0; }
-  .dishes { display:flex; flex-wrap:wrap; gap:6px; }
-  .dish { background:#fffdf9; border:1px solid var(--line); border-radius:8px; padding:3px 9px; font-size:12px; color:#5f5748; }
-  .note { background:#fbf0dc; color:var(--amber); border-radius:10px; padding:9px 11px; font-size:12.5px; margin-top:12px; line-height:1.55; }
-  .rsvp { background:#fffdf9; border:1px solid var(--line); border-radius:16px; padding:16px; margin-top:20px; }
-  .rsvp h2 { font-family:"Songti SC","STSong","SimSun",serif; font-size:18px; margin:0 0 3px; color:var(--ink); letter-spacing:1px; }
-  .rsvp .sub { font-size:11.5px; color:var(--muted); margin:0 0 14px; }
-  .field { margin-bottom:12px; }
-  .field label { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; }
-  .field input, .field textarea { width:100%; min-height:44px; border:1px solid #d9cdb6; border-radius:10px; background:#fdfbf6; padding:9px 11px; font-size:16px; font-family:inherit; outline:none; }
-  .field input:focus, .field textarea:focus { border-color:var(--gold); background:#fff; }
-  .field-row { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
-  .seg { display:flex; gap:4px; background:#efe9dd; border-radius:11px; padding:4px; }
-  .seg button { flex:1; min-height:38px; border:0; border-radius:8px; background:transparent; color:var(--muted); font-size:13.5px; font-family:inherit; }
-  .seg button.on { background:#fff; color:var(--ink); font-weight:600; box-shadow:0 2px 7px rgba(47,39,24,.07); }
-  .chips { display:flex; flex-wrap:wrap; gap:6px; }
-  .chip { border:1px solid #d9cdb6; background:#fdfbf6; color:#6d6352; border-radius:8px; padding:5px 9px; font-size:12.5px; font-family:inherit; }
-  .chip.on { background:var(--red); border-color:var(--red); color:#fff; }
-  .btn { display:inline-flex; align-items:center; justify-content:center; width:100%; min-height:48px; border:0; border-radius:12px; background:var(--ink); color:var(--cream); font-size:15px; font-family:inherit; font-weight:500; }
-  .btn:active { background:var(--ink2); }
-  .btn.gold { background:linear-gradient(135deg,#c39a4f,#b8893f); }
-  .btn.ghost { background:transparent; border:1px solid #d9cdb6; color:var(--ink2); }
-  .btn:disabled { opacity:.55; }
-  .hint { font-size:11px; color:var(--muted); line-height:1.6; margin-top:8px; }
-  .success { text-align:center; padding:8px 2px 2px; }
-  .success .tick { width:56px; height:56px; border-radius:50%; background:#e6f0ea; color:#2d6a52; display:flex; align-items:center; justify-content:center; margin:0 auto 12px; font-size:26px; }
-  .success h3 { font-family:"Songti SC","STSong","SimSun",serif; font-size:20px; margin:0 0 5px; color:var(--ink); }
-  .success p { font-size:12.5px; color:var(--muted); margin:0 0 12px; }
-  .code { font-family:ui-monospace,Consolas,monospace; font-size:10.5px; line-height:1.5; word-break:break-all; background:#f2ecdf; border:1px solid var(--line); border-radius:9px; padding:9px; color:#5f5748; text-align:left; max-height:110px; overflow:auto; }
-  .signboard { margin: -12px 22px 0; background:linear-gradient(145deg,#1b332c,#2c5345 65%,#37624f); border:1.5px solid rgba(217,189,133,.85); border-radius:14px; padding:13px 16px 12px; text-align:center; box-shadow:0 10px 24px rgba(8,18,14,.18); position:relative; z-index:2; }
-  .signboard b { display:block; font-family:"Songti SC","STSong","SimSun",serif; font-size:21px; letter-spacing:4px; color:#f2e6c9; }
-  .signboard span { display:block; font-size:11.5px; color:rgba(231,214,174,.82); margin-top:4px; letter-spacing:1px; }
-  .signboard i { display:block; font-style:normal; font-size:9.5px; color:rgba(231,214,174,.45); margin-top:6px; letter-spacing:1.5px; }
-  .sec-title { text-align:center; font-size:10.5px; letter-spacing:3px; color:var(--gold); margin:16px 0 8px; }
-  .classic { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
-  .classic .it { background:#f4eee3; border:1px solid var(--line); border-radius:11px; padding:9px 7px; text-align:center; }
-  .classic .it b { display:block; font-family:"Songti SC","STSong","SimSun",serif; font-size:12.5px; color:var(--ink); line-height:1.35; }
-  .classic .it span { display:block; font-size:9.5px; color:var(--muted); margin-top:3px; line-height:1.4; }
-  .locate { background:#fffdf9; border:1px solid var(--line); border-radius:14px; padding:13px 14px; margin-top:16px; }
-  .locate .addr { font-size:12.5px; color:#4f4a40; line-height:1.65; }
-  .locate a.nav { display:flex; align-items:center; justify-content:center; gap:6px; margin-top:10px; min-height:46px; border-radius:12px; background:linear-gradient(135deg,#c39a4f,#b8893f); color:#fff; text-decoration:none; font-size:14.5px; font-weight:600; box-shadow:0 6px 16px rgba(184,137,63,.28); }
-  .locate a.nav:active { filter:brightness(.95); }
-  .locate .hint2 { font-size:10.5px; color:var(--muted); margin-top:7px; text-align:center; }
-  .dish-gallery { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px; }
-  .dish-gallery .card { background:#f4eee3; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
-  .dish-gallery .pic { position:relative; height:112px; background:linear-gradient(145deg,#2c5345,#162d27); display:flex; align-items:center; justify-content:center; }
-  .dish-gallery .pic::after { content:"鲜"; font-family:"Songti SC","STSong","SimSun",serif; font-size:36px; color:rgba(231,214,174,.28); }
+  body { font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif; background:linear-gradient(175deg,#14261f,#0f1f1a 75%); color:#2b2a26; font-size:15px; line-height:1.6; min-height:100vh; }
+  .page { max-width:560px; margin:0 auto; padding:30px 16px 54px; }
+  .brand { text-align:center; color:var(--cream); font-family:"Songti SC","STSong","SimSun",serif; font-size:28px; letter-spacing:8px; font-weight:600; }
+  .brand small { display:block; font-size:10px; letter-spacing:4px; color:rgba(231,214,174,.62); margin-top:6px; font-family:inherit; }
+  .ornament { display:flex; align-items:center; gap:10px; margin:16px auto 0; width:64%; color:var(--gold2); }
+  .ornament::before,.ornament::after { content:""; flex:1; height:1px; background:linear-gradient(90deg,transparent,rgba(217,189,133,.6)); }
+  .ornament::after { background:linear-gradient(90deg,rgba(217,189,133,.6),transparent); }
+  .ornament i { width:7px; height:7px; border:1px solid var(--gold2); transform:rotate(45deg); font-style:normal; flex:none; }
+  .invite { margin-top:20px; background:linear-gradient(170deg,#16302a,#1f3d33 55%,#132720); border-radius:24px; overflow:hidden; box-shadow:0 28px 80px rgba(5,14,11,.5); border:1px solid rgba(217,189,133,.35); }
+  .invite-head { padding:34px 22px 8px; text-align:center; color:var(--cream); }
+  .invite-head .kicker { font-size:10.5px; letter-spacing:5px; color:var(--gold2); }
+  .invite-head .to { margin-top:22px; font-size:11px; letter-spacing:3px; color:var(--gold2); }
+  .invite-head .host { font-family:"Songti SC","STSong","SimSun",serif; font-size:20px; letter-spacing:1px; margin-top:6px; color:#fbf8f1; }
+  .invite-head h1 { font-family:"Songti SC","STSong","SimSun",serif; font-size:36px; letter-spacing:6px; margin:18px 0 8px; font-weight:600; color:#f2e6c9; }
+  .invite-head .courtesy { font-family:"Songti SC","STSong","SimSun",serif; font-size:13.5px; letter-spacing:2px; color:var(--gold2); }
+  .invite-head .when { font-family:"Songti SC","STSong","SimSun",serif; font-size:23px; margin-top:22px; color:#fbf8f1; font-weight:600; }
+  .invite-head .seat { font-family:"Songti SC","STSong","SimSun",serif; font-size:12.5px; color:rgba(247,243,234,.78); margin-top:6px; letter-spacing:1px; }
+  .invite-head .head-orn { display:flex; align-items:center; gap:10px; margin:26px auto 0; width:70%; }
+  .invite-head .head-orn::before,.invite-head .head-orn::after { content:""; flex:1; height:1px; background:linear-gradient(90deg,transparent,rgba(217,189,133,.45)); }
+  .invite-head .head-orn::after { background:linear-gradient(90deg,rgba(217,189,133,.45),transparent); }
+  .invite-head .head-orn i { width:6px; height:6px; border:1px solid var(--gold2); transform:rotate(45deg); font-style:normal; flex:none; }
+  .invite-body { padding:24px 20px 26px; background:var(--paper); }
+  .signboard { margin:0 2px 18px; background:linear-gradient(145deg,#1b332c,#2c5345 65%,#37624f); border:1.5px solid rgba(217,189,133,.85); border-radius:14px; padding:13px 16px 12px; text-align:center; }
+  .signboard b { display:block; font-family:"Songti SC","STSong","SimSun",serif; font-size:20px; letter-spacing:4px; color:#f2e6c9; }
+  .signboard span { display:block; font-size:11px; color:rgba(231,214,174,.82); margin-top:4px; letter-spacing:1px; }
+  .signboard i { display:block; font-style:normal; font-size:9px; color:rgba(231,214,174,.45); margin-top:6px; letter-spacing:1.5px; }
+  .sec-title { text-align:center; font-size:11px; letter-spacing:4px; color:var(--gold); margin:20px 0 10px; display:flex; align-items:center; gap:10px; }
+  .sec-title::before,.sec-title::after { content:""; flex:1; height:1px; background:linear-gradient(90deg,transparent,rgba(184,137,63,.4)); }
+  .sec-title::after { background:linear-gradient(90deg,rgba(184,137,63,.4),transparent); }
+  .dishes { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; }
+  .dish { background:#fffdf9; border:1px solid var(--line); border-radius:8px; padding:4px 10px; font-size:12px; color:#5f5748; }
+  .note { background:#fbf0dc; color:var(--amber); border-radius:10px; padding:9px 11px; font-size:12.5px; margin-top:14px; line-height:1.55; }
+  /* 菜品展示：两列大图 */
+  .dish-gallery { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .dish-gallery .card { background:#fffdf9; border:1px solid var(--line); border-radius:14px; overflow:hidden; box-shadow:0 6px 18px rgba(47,39,24,.06); }
+  .dish-gallery .pic { position:relative; height:150px; background:linear-gradient(145deg,#2c5345,#162d27); display:flex; align-items:center; justify-content:center; }
+  .dish-gallery .pic::after { content:"鲜"; font-family:"Songti SC","STSong","SimSun",serif; font-size:42px; color:rgba(231,214,174,.28); }
   .dish-gallery .pic img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
-  .dish-gallery .cap { padding:7px 10px 9px; }
-  .dish-gallery .cap b { font-family:"Songti SC","STSong","SimSun",serif; font-size:13.5px; color:var(--ink); display:block; line-height:1.3; }
-  .dish-gallery .cap span { font-size:11px; color:var(--amber); display:block; margin-top:2px; }
-  .env { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:8px; }
-  .env .pic { position:relative; height:96px; border-radius:10px; overflow:hidden; background:linear-gradient(145deg,#2c5345,#162d27); display:flex; align-items:center; justify-content:center; }
-  .env .pic::before { content:"鲜"; font-family:"Songti SC","STSong","SimSun",serif; font-size:26px; color:rgba(231,214,174,.25); }
+  .dish-gallery .cap { padding:9px 11px 11px; text-align:center; }
+  .dish-gallery .cap b { font-family:"Songti SC","STSong","SimSun",serif; font-size:14.5px; color:var(--ink); display:block; line-height:1.35; }
+  .dish-gallery .cap span { display:inline-block; margin-top:4px; font-size:11px; color:var(--gold); border:1px solid rgba(184,137,63,.35); border-radius:20px; padding:1px 10px; background:rgba(184,137,63,.06); }
+  /* 环境展示：一宽两半 */
+  .env { display:grid; gap:10px; }
+  .env .pic { position:relative; border-radius:14px; overflow:hidden; background:linear-gradient(145deg,#2c5345,#162d27); display:flex; align-items:center; justify-content:center; border:1px solid var(--line); }
+  .env .pic::before { content:"鲜"; font-family:"Songti SC","STSong","SimSun",serif; font-size:34px; color:rgba(231,214,174,.25); }
   .env .pic img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
-  .env .pic span { position:absolute; left:0; right:0; bottom:5px; text-align:center; font-size:9.5px; color:rgba(231,214,174,.75); letter-spacing:1px; }
-  .manager { display:flex; align-items:center; gap:12px; background:#fffdf9; border:1px solid var(--line); border-radius:14px; padding:12px 13px; margin-top:16px; }
-  .manager .avatar { width:54px; height:54px; border-radius:50%; background:linear-gradient(145deg,#2c5345,#162d27); color:#e7d6ae; font-family:"Songti SC","STSong","SimSun",serif; font-size:23px; display:flex; align-items:center; justify-content:center; flex:none; position:relative; overflow:hidden; border:1.5px solid rgba(217,189,133,.55); }
+  .env .pic span { position:absolute; left:0; right:0; bottom:0; padding:26px 0 9px; text-align:center; font-size:11px; letter-spacing:2px; color:#f2e6c9; background:linear-gradient(180deg,transparent,rgba(10,22,18,.78)); font-family:"Songti SC","STSong","SimSun",serif; }
+  .env .wide { height:170px; }
+  .env .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .env .half { height:120px; }
+  /* 服务经理 */
+  .manager { display:flex; align-items:center; gap:12px; background:#fffdf9; border:1px solid var(--line); border-radius:14px; padding:13px 14px; }
+  .manager .avatar { width:56px; height:56px; border-radius:50%; background:linear-gradient(145deg,#2c5345,#162d27); color:#e7d6ae; font-family:"Songti SC","STSong","SimSun",serif; font-size:24px; display:flex; align-items:center; justify-content:center; flex:none; position:relative; overflow:hidden; border:1.5px solid rgba(217,189,133,.55); }
   .manager .avatar img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
   .manager .info { flex:1; min-width:0; }
-  .manager .info i { display:block; font-style:normal; font-size:9.5px; letter-spacing:2px; color:var(--gold); }
-  .manager .info b { font-family:"Songti SC","STSong","SimSun",serif; font-size:15.5px; color:var(--ink); }
-  .manager .info span { display:block; font-size:11px; color:var(--muted); margin-top:2px; }
-  .manager a.call { flex:none; display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:0 14px; border-radius:19px; background:var(--ink); color:var(--cream); text-decoration:none; font-size:13px; }
-  .foot { text-align:center; color:rgba(247,243,234,.55); font-size:11.5px; line-height:1.8; margin-top:20px; }
+  .manager .info i { display:block; font-style:normal; font-size:9px; letter-spacing:1.4px; color:var(--gold); }
+  .manager .info b { font-family:"Songti SC","STSong","SimSun",serif; font-size:16.5px; color:var(--ink); }
+  .manager .info span { display:block; font-size:10.5px; color:var(--muted); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .manager a.call { flex:none; display:inline-flex; align-items:center; justify-content:center; min-height:40px; padding:0 16px; border-radius:20px; background:var(--ink); color:var(--cream); text-decoration:none; font-size:13px; }
+  /* 地址 + 双地图导航 */
+  .locate { background:#fffdf9; border:1px solid var(--line); border-radius:16px; padding:15px 15px 13px; }
+  .locate .addr { font-size:13px; color:#4f4a40; line-height:1.7; font-family:"Songti SC","STSong","SimSun",serif; }
+  .locate .navs { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:12px; }
+  .locate a.nav { display:flex; align-items:center; justify-content:center; gap:6px; min-height:46px; border-radius:12px; background:linear-gradient(135deg,#c39a4f,#b8893f); color:#fff; text-decoration:none; font-size:14px; font-weight:600; box-shadow:0 6px 16px rgba(184,137,63,.28); }
+  .locate a.nav:active { filter:brightness(.95); }
+  .locate a.nav.ghost { background:transparent; border:1.5px solid rgba(184,137,63,.5); color:var(--gold); box-shadow:none; }
+  .locate .hint2 { font-size:10.5px; color:var(--muted); margin-top:9px; text-align:center; }
+  .locate button.copy { width:100%; margin-top:9px; min-height:38px; border-radius:11px; border:1px dashed #d9cdb6; background:#fdfbf6; color:#6d6352; font-size:12.5px; font-family:inherit; }
+  .foot { text-align:center; color:rgba(247,243,234,.55); font-size:11.5px; line-height:1.9; margin-top:22px; }
   .foot b { color:var(--gold2); font-weight:500; }
+  .foot a { color:var(--gold2); text-decoration:none; }
   .empty { background:var(--paper); border-radius:18px; padding:40px 22px; text-align:center; color:var(--muted); margin-top:18px; }
-  .hidden { display:none !important; }
-  @media (max-width:360px){ .when{font-size:23px} .invite-head h1{font-size:26px} }
 </style>
 </head>
 <body>
 <div class="page">
   <div class="brand">長季鮮<small id="brandSub">福安菜 × 厦门海鲜</small></div>
+  <div class="ornament"><i></i></div>
   <div id="app"></div>
   <div class="foot" id="foot"></div>
 </div>
@@ -114,99 +100,78 @@
   const $=s=>document.querySelector(s);
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   function b64d(str){ let s=String(str||'').replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4) s+='='; const bin=atob(s); const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0)); return new TextDecoder().decode(bytes); }
-  function b64e(str){ const bytes=new TextEncoder().encode(str); let bin=''; bytes.forEach(b=>bin+=String.fromCharCode(b)); return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
   function readPayload(){ const q=new URLSearchParams(location.search).get('d'); const m=String(location.hash||'').match(/d=([^&]+)/); const raw=q||(m&&m[1]); if(!raw) return null; try{ return JSON.parse(b64d(raw)); }catch(e){ return null; } }
   function fmtDate(s){ if(!s) return ''; const p=String(s).split('-').map(Number); const d=new Date(p[0],(p[1]||1)-1,p[2]||1); return (d.getMonth()+1)+'月'+d.getDate()+'日 周'+('日一二三四五六'[d.getDay()]); }
-  function uid(){ return (window.crypto&&crypto.randomUUID)?crypto.randomUUID().replace(/-/g,'').slice(0,16):('r'+Date.now().toString(36)+Math.random().toString(36).slice(2,8)); }
-  const P=readPayload();
-  const DIETS=['无忌口','海鲜过敏','不吃辣','素食','不吃牛羊肉','不吃猪肉','坚果过敏','不吃香菜','不吃花生','少油少盐'];
-  let state={attend:true,dietary:[],submitted:false,receipt:'',cloudOk:false,busy:false};
+  // v4 短字段 → 统一结构；v2/v3 旧链接兼容
+  function norm(P){
+    if(!P) return null;
+    if(P.v>=4 && P.s){
+      return {
+        shop:{ name:P.s.n, cuisine:P.s.c, hours:P.s.h, phone:P.s.p, address:P.s.a, slogan:P.s.g, adText:P.s.ad,
+          manager:P.s.m ? { name:P.s.m.n, phone:P.s.m.p, title:P.s.m.t } : null },
+        classic:(P.c||[]).map(x=>({name:x.n,price:x.pr,note:x.no})),
+        order:{ date:P.o.d, time:P.o.t, room:P.o.r, host:P.o.h, partySize:P.o.s, occasion:P.o.c, special:P.o.sp, dishes:P.o.ds||[] }
+      };
+    }
+    return { shop:P.shop||{}, classic:P.classic||[], order:P.order||{} };
+  }
+  // 双地图导航：高德 + 百度，装了哪个点哪个
+  function navUrls(shop){
+    const kw=((shop.name||'')+' '+(shop.address||'')).trim();
+    if(!kw) return null;
+    return {
+      amap:'https://uri.amap.com/search?keyword='+encodeURIComponent(kw)+'&callnative=1&src=changjixian',
+      baidu:'https://api.map.baidu.com/geocoder?address='+encodeURIComponent(shop.address||shop.name||'')+'&output=html&src=changjixian'
+    };
+  }
+  async function copy(text,btn,okLabel){
+    try{
+      if(navigator.clipboard&&window.isSecureContext){ await navigator.clipboard.writeText(text); }
+      else{ const ta=document.createElement('textarea'); ta.value=text; ta.style.cssText='position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+      if(btn){ const old=btn.textContent; btn.textContent=okLabel||'已复制'; setTimeout(()=>btn.textContent=old,1500); }
+    }catch(e){ alert('复制失败，请长按地址手动复制'); }
+  }
+  const P=norm(readPayload());
 
   function render(){
     if(!P||!P.order){ $('#app').innerHTML='<div class="empty">邀请函链接无效或已过期。<br>请让主人家重新发一份。</div>'; return; }
     const shop=P.shop||{}; const o=P.order||{}; const mgr=shop.manager||{};
-    const dishes=(o.dishes||[]).slice(0,10);
+    const dishes=(o.dishes||[]).slice(0,12);
     const classic=(P.classic||[]).filter(x=>x&&x.name);
     const dishPic=(name)=>'photos/dish-'+encodeURIComponent(name)+'.jpg';
     const imgTag=(src)=>'<img src="'+esc(src)+'" alt="" loading="lazy" onerror="this.remove()">';
-    const head='<div class="invite"><div class="invite-head"><div class="kicker">INVITATION</div><h1>诚 邀 赴 宴</h1><p>'+esc(shop.cuisine||'福安菜 × 厦门海鲜')+(shop.name?' · '+esc(shop.name):'')+'</p></div>'+
+    const nav=navUrls(shop);
+    const html='<div class="invite">'+
+      '<div class="invite-head"><div class="kicker">INVITATION</div>'+
+      '<div class="to">谨 呈</div>'+
+      '<div class="host">'+esc(o.host||'贵客')+' 及同席亲友 台鉴</div>'+
+      '<h1>诚 邀 赴 宴</h1>'+
+      '<div class="courtesy">敬备菲酌 · 恭候台光</div>'+
+      '<div class="when">谨订于 '+esc(fmtDate(o.date))+' '+esc(o.time||'')+'</div>'+
+      '<div class="seat">席设 '+esc(o.room||'私厨包厢')+' · '+(o.partySize||'')+' 位'+(o.occasion?' · '+esc(o.occasion):'')+'</div>'+
+      '<div class="head-orn"><i></i></div></div>'+
+      '<div class="invite-body">'+
       '<div class="signboard"><b>'+esc(shop.name||'长季鲜')+'</b><span>'+esc(shop.slogan||'时令海鲜 · 私厨家宴')+(shop.adText?' · '+esc(shop.adText):'')+'</span><i>店 招 广 告 位</i></div>'+
-      '<div class="invite-body"><div class="greet">'+esc(o.host||'贵客')+' 及同席亲友，见字如面：</div>'+
-      '<div class="when">'+esc(fmtDate(o.date))+' '+esc(o.time||'')+'<small>'+esc(o.room||'私厨包厢')+' · '+(o.partySize||'')+' 位</small></div>'+
-      '<div class="facts"><div class="fact"><span>宴请场合</span><b>'+esc(o.occasion||'私厨晚宴')+'</b></div><div class="fact"><span>包厢</span><b>'+esc(o.room||'待定')+'</b></div>'+
-      '<div class="fact"><span>到场时间</span><b>'+esc(o.time||'')+'</b></div><div class="fact"><span>人数</span><b>'+(o.partySize||'')+' 位</b></div></div>'+
-      (dishes.length?'<div class="divider"></div><div class="greet" style="font-size:13px;color:var(--muted);margin-bottom:8px">当日菜单 · 以到店为准</div><div class="dishes">'+dishes.map(d=>'<span class="dish">'+esc(d)+'</span>').join('')+'</div>':'')+
-      (classic.length?'<div class="sec-title">菜 品 展 示</div><div class="dish-gallery">'+classic.slice(0,6).map(x=>'<div class="card"><div class="pic">'+imgTag(dishPic(x.name))+'</div><div class="cap"><b>'+esc(x.name)+'</b><span>'+(x.price?('¥'+x.price+' / 份'):esc(x.note||'招牌必点'))+'</span></div></div>').join('')+'</div>':'')+
-      '<div class="sec-title">环 境 展 示</div><div class="env">'+[['大厅环境',1],['VIP 包厢',2],['茶歇卡座',3]].map(t=>'<div class="pic">'+imgTag('photos/env-'+t[1]+'.jpg')+'<span>'+t[0]+'</span></div>').join('')+'</div>'+
-      ((mgr.name||mgr.phone)?'<div class="manager"><div class="avatar">'+imgTag('photos/manager.jpg')+esc((mgr.name||shop.name||'鲜').slice(0,1))+'</div><div class="info"><i>专属服务经理</i><b>'+esc(mgr.name||shop.name||'长季鲜')+'</b><span>'+esc(mgr.title||'包厢服务经理')+(mgr.phone?(' · 订座 '+esc(mgr.phone)):' · 全程一对一服务')+'</span></div>'+(mgr.phone?'<a class="call" href="tel:'+esc(mgr.phone)+'">电话联系</a>':'')+'</div>':'')+
       (o.special?'<div class="note">'+esc(o.special)+'</div>':'')+
-      ((shop.address||shop.nav)?'<div class="locate"><div class="addr">'+esc(shop.address||'')+'</div>'+
-        (shop.nav?'<a class="nav" href="'+esc(shop.nav)+'" target="_blank" rel="noopener">一键导航到 '+esc(shop.name||'长季鲜')+'</a>':'')+
-        '<div class="hint2">点「一键导航」会调起手机里的高德 / 百度地图；自驾可先发给司机。</div></div>':'')+
+      (dishes.length?'<div class="sec-title">当 日 菜 单</div><div class="dishes">'+dishes.map(d=>'<span class="dish">'+esc(d)+'</span>').join('')+'</div>':'')+
+      (classic.length?'<div class="sec-title">菜 品 展 示</div><div class="dish-gallery">'+classic.slice(0,6).map(x=>'<div class="card"><div class="pic">'+imgTag(dishPic(x.name))+'</div><div class="cap"><b>'+esc(x.name)+'</b><span>'+(x.price?('¥ '+x.price+' / 份'):esc(x.note||'招牌必点'))+'</span></div></div>').join('')+'</div>':'')+
+      '<div class="sec-title">环 境 展 示</div><div class="env">'+
+        '<div class="pic wide">'+imgTag('photos/env-1.jpg')+'<span>大 厅 环 境</span></div>'+
+        '<div class="row"><div class="pic half">'+imgTag('photos/env-2.jpg')+'<span>VIP 包厢</span></div>'+
+        '<div class="pic half">'+imgTag('photos/env-3.jpg')+'<span>茶歇卡座</span></div></div></div>'+
+      ((mgr.name||mgr.phone)?'<div class="sec-title">专 属 服 务 经 理</div><div class="manager"><div class="avatar">'+imgTag('photos/manager.jpg')+esc((mgr.name||shop.name||'鲜').slice(0,1))+'</div><div class="info"><i>PRIVATE MANAGER</i><b>'+esc(mgr.name||shop.name||'长季鲜')+'</b><span>'+esc(mgr.title||'包厢服务经理')+(mgr.phone?(' · '+esc(mgr.phone)):'')+'</span></div>'+(mgr.phone?'<a class="call" href="tel:'+esc(mgr.phone)+'">电话联系</a>':'')+'</div>':'')+
+      ((shop.address||nav)?'<div class="sec-title">地 址 与 导 航</div><div class="locate"><div class="addr">'+esc(shop.address||'')+'</div>'+
+        (nav?'<div class="navs"><a class="nav" href="'+esc(nav.amap)+'" target="_blank" rel="noopener">高德地图 · 一键导航</a>'+
+        '<a class="nav ghost" href="'+esc(nav.baidu)+'" target="_blank" rel="noopener">百度地图 · 一键导航</a></div>':'')+
+        (shop.address?'<button class="copy" id="copyAddr">复制地址（发给司机 / 打车用）</button>':'')+
+        '<div class="hint2">手机装了高德或百度地图，点按钮直接导航到店。</div></div>':'')+
       '</div></div>';
-    const foot='<div class="foot"><b>'+esc(shop.name||'长季鲜')+'</b>'+(shop.address?'<br>'+esc(shop.address):'')+(shop.hours?'<br>'+esc(shop.hours):'')+(shop.phone?'<br>订座 '+esc(shop.phone):'')+'<br>请提前告知忌口，厨房好为您准备。</div>';
+    const foot='<div class="foot"><b>'+esc(shop.name||'长季鲜')+' · 敬约</b>'+(shop.address?'<br>'+esc(shop.address):'')+(shop.hours?'<br>'+esc(shop.hours):'')+(shop.phone?'<br>订座 <a href="tel:'+esc(shop.phone)+'">'+esc(shop.phone)+'</a>':'')+'</div>';
+    $('#app').innerHTML=html;
     $('#foot').innerHTML=foot;
     $('#brandSub').textContent=(shop.cuisine||'福安菜 × 厦门海鲜');
-    if(state.submitted){
-      $('#app').innerHTML=head+'<div class="rsvp success"><div class="tick">✓</div><h3>'+(state.cloudOk?'回执已提交':'回执已生成')+'</h3>'+
-        '<p>'+(state.cloudOk?'主人家已经能看到你的到场人数和忌口。':'请把下面的回执码复制发给邀请人，主人家录入后即可同步。')+'</p>'+
-        '<div class="code" id="receiptCode">'+esc(state.receipt)+'</div>'+
-        '<div style="margin-top:12px"><button class="btn gold" id="copyBtn">复制回执码</button></div>'+
-        '<div style="margin-top:9px"><button class="btn ghost" id="againBtn">再帮一位亲友回执</button></div>'+
-        '<div class="hint">'+(state.cloudOk?'如果主人家没收到，也可以把回执码发给他手动录入。':'多人同行时，每位亲友各提交一次即可。')+'</div></div>';
-      $('#copyBtn').addEventListener('click',()=>copy(state.receipt));
-      $('#againBtn').addEventListener('click',()=>{ state={attend:true,dietary:[],submitted:false,receipt:'',cloudOk:false,busy:false}; render(); });
-      return;
-    }
-    $('#app').innerHTML=head+'<div class="rsvp"><h2>赴宴回执</h2><p class="sub">请填写到场情况，方便厨房按人数备菜；忌口请务必写清。</p>'+
-      '<div class="field"><label>你的称呼</label><input id="gName" type="text" placeholder="如：王太太 / 小林" value=""></div>'+
-      '<div class="field-row"><div class="field"><label>电话（选填）</label><input id="gPhone" type="tel" inputmode="tel" placeholder="方便主人家联系"></div>'+
-      '<div class="field"><label>到场人数</label><input id="gSize" type="number" inputmode="numeric" min="1" max="30" value="1"></div></div>'+
-      '<div class="field"><label>是否到场</label><div class="seg" id="attendSeg"><button class="'+(state.attend?'on':'')+'" data-v="1">准时到场</button><button class="'+(state.attend?'':'on')+'" data-v="0">这次来不了</button></div></div>'+
-      '<div class="field" id="dietField"><label>个人忌口（可多选）</label><div class="chips" id="dietChips">'+DIETS.map(x=>'<button class="chip '+(state.dietary.includes(x)?'on':'')+'" data-v="'+x+'">'+x+'</button>').join('')+'</div>'+
-      '<input id="dietCustom" class="mt8" type="text" placeholder="补充：如不吃葱蒜、儿童餐" style="width:100%;min-height:42px;border:1px solid #d9cdb6;border-radius:10px;background:#fdfbf6;padding:9px 11px;font-size:15px;margin-top:8px"></div>'+
-      '<button class="btn gold" id="submitBtn">提交回执</button>'+
-      '<div class="hint">提交后主人家会收到你的到场人数和忌口。'+(P.sync?'':'如果网络不通，会生成一段回执码，复制发给邀请人即可。')+'</div></div>';
-    bind();
-  }
-  function bind(){
-    document.querySelectorAll('#attendSeg button').forEach(b=>b.addEventListener('click',()=>{ state.attend=b.dataset.v==='1'; document.querySelectorAll('#attendSeg button').forEach(x=>x.classList.toggle('on',x.dataset.v===b.dataset.v)); $('#dietField').classList.toggle('hidden',!state.attend); }));
-    document.querySelectorAll('#dietChips button').forEach(b=>b.addEventListener('click',()=>{
-      const v=b.dataset.v;
-      if(v==='无忌口'){ state.dietary=[]; document.querySelectorAll('#dietChips button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); return; }
-      const i=state.dietary.indexOf(v); if(i>=0) state.dietary.splice(i,1); else state.dietary.push(v);
-      b.classList.toggle('on',state.dietary.includes(v));
-      document.querySelectorAll('#dietChips button').forEach(x=>{ if(x.dataset.v==='无忌口') x.classList.toggle('on',state.dietary.length===0); });
-    }));
-    $('#submitBtn').addEventListener('click',submitRsvp);
-  }
-  async function copy(text){
-    try{ if(navigator.clipboard&&window.isSecureContext){ await navigator.clipboard.writeText(text); } else { const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); } const b=$('#copyBtn'); if(b){ const old=b.textContent; b.textContent='已复制'; setTimeout(()=>b.textContent=old,1500); } }catch(e){ alert('复制失败，请长按回执码手动复制'); }
-  }
-  async function submitRsvp(){
-    if(state.busy) return;
-    const name=(($('#gName')||{}).value||'').trim();
-    if(!name){ alert('请填写你的称呼'); return; }
-    const phone=(($('#gPhone')||{}).value||'').trim();
-    const size=state.attend?(Number((($('#gSize')||{}).value)||1)):0;
-    const custom=(($('#dietCustom')||{}).value||'').trim();
-    const dietary=state.dietary.filter(x=>x!=='无忌口');
-    if(custom) custom.split(/[，,、\s]+/).forEach(x=>{ if(x&&dietary.indexOf(x)<0) dietary.push(x); });
-    const id=uid(); const submittedAt=new Date().toISOString();
-    const inviteCode=(P.sync&&P.sync.inviteCode)||(P.order&&P.order.code)||'';
-    const payload={ v:1, id, inviteCode, name, phone, attend:state.attend, dietary, partySize:size||1, submittedAt, source:'invite' };
-    const receipt='CJXRSVP1:'+b64e(JSON.stringify(payload));
-    state.busy=true; state.receipt=receipt;
-    const btn=$('#submitBtn'); if(btn){ btn.disabled=true; btn.textContent='正在提交…'; }
-    let ok=false;
-    if(P.sync&&P.sync.url&&P.sync.anonKey){
-      try{
-        const row={ id, order_id:P.sync.orderId||(P.order&&P.order.id)||'', invite_code:inviteCode, guest_name:name, phone, attend:state.attend, dietary, party_size:size||1, submitted_at:submittedAt, source:'invite' };
-        const res=await fetch(String(P.sync.url).replace(/\/+$/,'')+'/rest/v1/cjx_rsvps',{method:'POST',headers:{'apikey':P.sync.anonKey,'Authorization':'Bearer '+P.sync.anonKey,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(row)});
-        ok=res.ok;
-      }catch(e){ ok=false; }
-    }
-    state.busy=false; state.cloudOk=ok; state.submitted=true; render();
+    const ca=$('#copyAddr');
+    if(ca) ca.addEventListener('click',()=>copy(shop.address||'',ca,'地址已复制，去微信粘贴吧'));
   }
   render();
 })();

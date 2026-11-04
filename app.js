@@ -248,6 +248,11 @@
         s.settings.lng = '';
       }
     });
+    // 门店电话 / 专属经理：旧演示值或空值 → 正式联系方式
+    const oldPhones = ['0593-6688999', '0592-6688999', '13805926688'];
+    if (!s.settings.phone || oldPhones.indexOf(String(s.settings.phone).trim()) >= 0) s.settings.phone = '18950071506';
+    if (!s.settings.managerName || s.settings.managerName === '陈经理') s.settings.managerName = '陈锦长';
+    if (!s.settings.managerPhone || oldPhones.indexOf(String(s.settings.managerPhone).trim()) >= 0) s.settings.managerPhone = '18950071506';
     s.meta.schemaVersion = 3;
     return s;
   }
@@ -1319,10 +1324,9 @@
         (guestDiet.length ? '<div class="alert-line">' + I.alert + '<div><b>亲友回执忌口：</b>' + esc(guestDiet.join('、')) + '</div></div>' : '') +
         (o.special ? '<div class="alert-line gold">' + I.spark + '<div><b>特殊安排：</b>' + esc(o.special) + '</div></div>' : '') +
         (o.notes ? '<div class="notice mt8">' + esc(o.notes) + '</div>' : '') + '</div></div>' : '') +
-      (o.inviteCode || guests.length ? '<div class="section"><div class="sec-head"><div class="sec-title">亲友回执 · ' + (attend.length ? attend.reduce((n, g) => n + (g.partySize || 1), 0) : 0) + ' 人确认到场</div>' +
-        (canManage ? '<button class="sec-action" data-act="refresh-rsvp">刷新</button>' : '') + '</div><div class="card pad">' +
-        (guests.length ? guests.map((g) => '<div class="info-row"><span class="k">' + esc(g.name || '亲友') + (g.attend === false ? '（缺席）' : '') + '</span><span class="v">' + (g.dietary && g.dietary.length ? esc(g.dietary.join('、')) : '无特殊忌口') + '</span></div>').join('') : '<div class="muted small">邀请已生成，还没有亲友回执。</div>') +
-        (canManage ? '<div class="btn-row mt8"><button class="btn sm soft" data-act="open-invite">邀请函</button><button class="btn sm soft" data-act="import-rsvp">录入回执码</button></div>' : '') + '</div></div>' : '') +
+      (guests.length ? '<div class="section"><div class="sec-head"><div class="sec-title">亲友到访记录 · ' + (attend.length ? attend.reduce((n, g) => n + (g.partySize || 1), 0) : 0) + ' 人确认到场</div>' +
+        (canManage ? '<button class="sec-action" data-act="open-invite">邀请函</button>' : '') + '</div><div class="card pad">' +
+        guests.map((g) => '<div class="info-row"><span class="k">' + esc(g.name || '亲友') + (g.attend === false ? '（缺席）' : '') + '</span><span class="v">' + (g.dietary && g.dietary.length ? esc(g.dietary.join('、')) : '无特殊忌口') + '</span></div>').join('') + '</div></div>' : '') +
       (cust ? '<div class="section"><div class="sec-head"><div class="sec-title">熟客档案</div><button class="sec-action" data-act="open-customer" data-id="' + cust.id + '">查看</button></div><div class="card pad">' +
         '<div class="row"><div class="avatar">' + esc(cust.name.slice(0, 1)) + '</div><div class="grow"><div class="cust-name">' + esc(custLabel(cust)) + (cust.tags || []).map((t) => chip(t, 'gold')).join('') + '</div>' +
         '<div class="cust-sub">' + (cust.dietary && cust.dietary.length ? '忌口：' + esc(cust.dietary.join('、')) + ' · ' : '') + (cust.tasteTags && cust.tasteTags.length ? '口味：' + esc(cust.tasteTags.slice(0, 4).join('、')) : '') + '</div></div></div>' +
@@ -1836,27 +1840,20 @@
     openSheet('<h3>' + esc(title) + '</h3><p class="sheet-sub">' + esc(msg) + '</p><div class="btn-row"><button class="btn ghost" data-act="sheet-cancel">先不</button><button class="btn ' + (danger ? 'danger' : 'primary') + '" data-act="sheet-ok">' + esc(okLabel) + '</button></div>');
   }
 
-  /* ---------- 邀请函 / 回执 ---------- */
+  /* ---------- 邀请函 ---------- */
+  // v4：短字段名 + 不带云端回执配置，链接能短一半以上，微信里转发不再像"一堆代码"
+  // 导航链接由 invite.html 根据店名+地址现算，不占链接体积
   function invitePayload(o) {
-    const sync = (window.CJXSync && window.CJXSync.isAuthed()) ? window.CJXSync.getConfig() : null;
     const s = S.settings;
+    const mgr = (s.managerName || s.managerPhone) ? { n: s.managerName || '', p: s.managerPhone || s.phone || '', t: s.managerTitle || '包厢服务经理' } : null;
     return {
-      v: 3, t: 'invite',
-      shop: {
-        name: s.shopName, cuisine: s.cuisine, hours: s.businessHours, phone: s.phone,
-        address: s.address || '', slogan: s.slogan || '', adText: s.adText || '',
-        nav: D.navUrlOf(s),
-        manager: { name: s.managerName || '', phone: s.managerPhone || s.phone || '', title: s.managerTitle || '包厢服务经理' }
-      },
-      classic: D.classicDishes(S, 6),
-      order: {
-        id: o.id, code: o.code, date: o.date, time: o.time, room: roomName(o.roomId),
-        host: o.customerName, partySize: o.partySize, occasion: o.occasion,
-        special: o.special, dishes: (o.dishes || []).map((d) => d.name || d)
-      },
-      sync: sync ? { url: sync.url, anonKey: sync.anonKey, orderId: o.id, inviteCode: o.inviteCode } : null
+      v: 4, t: 'invite',
+      s: { n: s.shopName, c: s.cuisine, h: s.businessHours, p: s.phone, a: s.address || '', g: s.slogan || '', ad: s.adText || '', m: mgr },
+      c: D.classicDishes(S, 6).map((d) => ({ n: d.name, pr: Number(d.price) || 0, no: d.note || '' })),
+      o: { d: o.date, t: o.time, r: roomName(o.roomId), h: o.customerName, s: o.partySize, c: o.occasion, sp: o.special || '', ds: (o.dishes || []).map((d) => d.name || d) }
     };
   }
+  const SERIF = '"Songti SC","STSong","SimSun",serif';
   function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
@@ -1954,175 +1951,192 @@
     roundRect(ctx, x, y, w, h, r);
     ctx.strokeStyle = 'rgba(217,189,133,.5)'; ctx.lineWidth = 1.5; ctx.stroke();
   }
+  /* 高端私宴风格邀请函：墨绿 + 烫金，谨订措辞；高度按内容动态裁剪 */
+  function ornament(ctx, cx, cy, halfW) {
+    ctx.strokeStyle = 'rgba(217,189,133,.62)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(cx - halfW, cy); ctx.lineTo(cx - 16, cy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + 16, cy); ctx.lineTo(cx + halfW, cy); ctx.stroke();
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.PI / 4);
+    ctx.strokeStyle = '#d9bd85'; ctx.strokeRect(-5, -5, 10, 10); ctx.restore();
+  }
+  function secTitle(ctx, W, y, text) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#c9a45c'; ctx.font = '600 26px ' + SERIF;
+    ctx.fillText(text, W / 2, y + 20);
+    const tw = ctx.measureText(text).width;
+    ctx.strokeStyle = 'rgba(217,189,133,.38)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(140, y + 12); ctx.lineTo(W / 2 - tw / 2 - 26, y + 12); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W / 2 + tw / 2 + 26, y + 12); ctx.lineTo(W - 140, y + 12); ctx.stroke();
+    return y + 48;
+  }
+  function scrimLabel(ctx, text, x, y, w, h) {
+    const g = ctx.createLinearGradient(0, y + h - 86, 0, y + h);
+    g.addColorStop(0, 'rgba(10,22,18,0)'); g.addColorStop(1, 'rgba(10,22,18,.78)');
+    ctx.fillStyle = g; ctx.fillRect(x, y + h - 86, w, 86);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#f2e6c9'; ctx.font = '600 22px ' + SERIF;
+    ctx.fillText(text, x + w / 2, y + h - 26);
+  }
   async function buildInvitePoster(o) {
-    const W = 1080, H = 2860;
-    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const W = 1080, HMAX = 4800;
+    const c = document.createElement('canvas'); c.width = W; c.height = HMAX;
     const ctx = c.getContext('2d');
     const shop = S.settings;
-    const bg = ctx.createLinearGradient(0, 0, W, H);
-    bg.addColorStop(0, '#162d27'); bg.addColorStop(.55, '#24483b'); bg.addColorStop(1, '#132720');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-    roundRect(ctx, 40, 40, W - 80, H - 80, 48);
-    ctx.fillStyle = '#fbf8f1'; ctx.fill();
-    ctx.strokeStyle = '#d9bd85'; ctx.lineWidth = 3; ctx.stroke();
-    roundRect(ctx, 62, 62, W - 124, H - 124, 40);
-    ctx.strokeStyle = 'rgba(184,137,63,.34)'; ctx.lineWidth = 2; ctx.stroke();
+    const bg = ctx.createLinearGradient(0, 0, W, HMAX);
+    bg.addColorStop(0, '#14261f'); bg.addColorStop(.5, '#1f3d33'); bg.addColorStop(1, '#0f1f1a');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, HMAX);
 
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#b8893f'; ctx.font = '22px sans-serif';
-    ctx.fillText('I N V I T A T I O N', W / 2, 142);
-    ctx.fillStyle = '#1f3a32'; ctx.font = '700 66px "Songti SC","STSong","SimSun",serif';
-    ctx.fillText(shop.shopName || '长季鲜', W / 2, 232);
-    ctx.fillStyle = '#8a8070'; ctx.font = '24px sans-serif';
-    ctx.fillText(shop.cuisine || '', W / 2, 278);
-    ctx.strokeStyle = '#d9bd85'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(360, 312); ctx.lineTo(720, 312); ctx.stroke();
+    ctx.fillStyle = '#d9bd85'; ctx.font = '600 24px sans-serif';
+    ctx.fillText('I N V I T A T I O N', W / 2, 128);
+    ctx.fillStyle = '#f2e6c9'; ctx.font = '700 74px ' + SERIF;
+    ctx.fillText(shop.shopName || '长季鲜', W / 2, 218);
+    ctx.fillStyle = 'rgba(231,214,174,.72)'; ctx.font = '23px sans-serif';
+    ctx.fillText(shop.cuisine || '', W / 2, 260);
+    ornament(ctx, W / 2, 300, 320);
 
-    ctx.fillStyle = '#1f3a32'; ctx.font = '600 86px "Songti SC","STSong","SimSun",serif';
-    ctx.fillText('诚 邀 赴 宴', W / 2, 432);
-    ctx.fillStyle = '#4f4a40'; ctx.font = '32px sans-serif';
-    ctx.fillText(truncate(orderName(o) || '贵客', 12) + ' 及同席亲友', W / 2, 498);
-    ctx.fillStyle = '#1f3a32'; ctx.font = '600 56px "Songti SC","STSong","SimSun",serif';
-    ctx.fillText(D.fmtDateCN(o.date) + ' ' + D.weekdayCN(o.date) + ' ' + (o.time || ''), W / 2, 586);
-    ctx.fillStyle = '#6d6352'; ctx.font = '27px sans-serif';
-    ctx.fillText([roomName(o.roomId) || '包厢待定', (o.partySize || '') + ' 位', o.occasion || ''].filter(Boolean).join('  ·  '), W / 2, 638);
+    let y = 346;
+    ctx.fillStyle = '#c9a45c'; ctx.font = '26px ' + SERIF;
+    ctx.fillText('谨 呈', W / 2, y + 30);
+    ctx.fillStyle = '#fbf8f1'; ctx.font = '600 42px ' + SERIF;
+    ctx.fillText(truncate(orderName(o) || '贵客', 12) + ' 及同席亲友 台鉴', W / 2, y + 92);
+    ctx.fillStyle = '#f2e6c9'; ctx.font = '600 90px ' + SERIF;
+    ctx.fillText('诚 邀 赴 宴', W / 2, y + 212);
+    ctx.fillStyle = '#c9a45c'; ctx.font = '28px ' + SERIF;
+    ctx.fillText('敬 备 菲 酌 · 恭 候 台 光', W / 2, y + 262);
+    ctx.fillStyle = '#fbf8f1'; ctx.font = '600 48px ' + SERIF;
+    ctx.fillText('谨订于 ' + D.fmtDateCN(o.date) + ' ' + D.weekdayCN(o.date) + ' ' + (o.time || ''), W / 2, y + 336);
+    ctx.fillStyle = 'rgba(247,243,234,.78)'; ctx.font = '27px ' + SERIF;
+    ctx.fillText('席设 ' + (roomName(o.roomId) || '包厢待定') + ' · ' + (o.partySize || '') + ' 位' + (o.occasion ? ' · ' + truncate(o.occasion, 12) : ''), W / 2, y + 386);
     if (o.special) {
-      ctx.fillStyle = '#a9721c'; ctx.font = '22px sans-serif';
-      ctx.fillText('特殊安排 · ' + truncate(o.special, 30), W / 2, 680);
+      ctx.fillStyle = '#e0b264'; ctx.font = '23px sans-serif';
+      ctx.fillText('特殊安排 · ' + truncate(o.special, 32), W / 2, y + 424);
     }
-    ctx.strokeStyle = 'rgba(184,137,63,.42)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(140, 712); ctx.lineTo(W - 140, 712); ctx.stroke();
+    y += 462;
+    ornament(ctx, W / 2, y, 360);
+    y += 36;
 
-    ctx.fillStyle = '#b8893f'; ctx.font = '24px sans-serif';
-    ctx.fillText('当 日 菜 单', W / 2, 762);
+    // 当日菜单
     const dishes = (o.dishes || []).map((d) => (typeof d === 'string' ? d : d.name)).filter(Boolean);
-    ctx.textAlign = 'left';
-    dishes.slice(0, 10).forEach((name, i) => {
-      const x = i < 5 ? 160 : 570;
-      const y = 822 + (i % 5) * 46;
-      ctx.fillStyle = '#b8893f'; ctx.beginPath(); ctx.arc(x - 18, y - 9, 4, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#3d3a33'; ctx.font = '27px sans-serif';
-      ctx.fillText(truncate(name, 12), x, y);
-    });
-    if (dishes.length > 10) {
-      ctx.textAlign = 'center'; ctx.fillStyle = '#8a8070'; ctx.font = '22px sans-serif';
-      ctx.fillText('共 ' + dishes.length + ' 道菜', W / 2, 1062);
-    }
-
-    // 菜品展示（图片网格 3×2，照片放 photos/dish-菜名.jpg）
-    const classic = D.classicDishes(S, 6);
-    let y = 1090;
-    if (classic.length) {
-      const imgs = await Promise.all(classic.map((d) => loadImg(photoSrc('dish', d.name))));
-      ctx.textAlign = 'center'; ctx.fillStyle = '#b8893f'; ctx.font = '24px sans-serif';
-      ctx.fillText('菜 品 展 示', W / 2, y + 4);
-      const gap = 16, cw = (W - 220 - gap * 2) / 3, ch = 150;
-      const gridY = y + 26, rowH = ch + 66;
-      classic.forEach((d, i) => {
-        const col = i % 3, row = Math.floor(i / 3);
-        const x = 110 + col * (cw + gap), yy = gridY + row * (rowH + gap);
-        roundRect(ctx, x, yy, cw, rowH, 16);
-        ctx.fillStyle = '#f4eee3'; ctx.fill();
-        ctx.strokeStyle = '#e7ddca'; ctx.lineWidth = 1; ctx.stroke();
-        drawPhotoBox(ctx, imgs[i], x + 8, yy + 8, cw - 16, ch - 16, 10, d.name, '招牌菜品');
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#1f3a32'; ctx.font = '600 25px "Songti SC","STSong","SimSun",serif';
-        ctx.fillText(truncate(d.name, 8), x + cw / 2, yy + ch + 32);
-        ctx.fillStyle = '#a9721c'; ctx.font = '19px sans-serif';
-        ctx.fillText(d.price ? ('¥' + d.price + ' / 份') : truncate(d.note || '招牌必点', 10), x + cw / 2, yy + ch + 60);
+    if (dishes.length) {
+      y = secTitle(ctx, W, y, '当 日 菜 单');
+      ctx.textAlign = 'left';
+      dishes.slice(0, 12).forEach((name, i) => {
+        const col = i % 2, row = Math.floor(i / 2);
+        const x = 170 + col * 440, yy = y + 16 + row * 52;
+        ctx.fillStyle = '#c9a45c'; ctx.beginPath(); ctx.arc(x - 20, yy - 9, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#f7f3ea'; ctx.font = '28px ' + SERIF;
+        ctx.fillText(truncate(name, 11), x, yy);
       });
-      y = gridY + Math.ceil(classic.length / 3) * (rowH + gap) + 6;
-    } else {
-      y = 1100;
+      y += 16 + Math.ceil(Math.min(dishes.length, 12) / 2) * 52 + 10;
+      if (dishes.length > 12) {
+        ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(231,214,174,.6)'; ctx.font = '22px sans-serif';
+        ctx.fillText('共 ' + dishes.length + ' 道菜 · 以到店时令为准', W / 2, y); y += 34;
+      }
+      y += 18; ornament(ctx, W / 2, y, 360); y += 36;
     }
 
-    // 环境展示（3 图横排，照片放 photos/env-1.jpg … env-3.jpg）
-    ctx.textAlign = 'center'; ctx.fillStyle = '#b8893f'; ctx.font = '24px sans-serif';
-    ctx.fillText('环 境 展 示', W / 2, y + 34);
-    const envY = y + 56, egap = 16, ew = (W - 220 - egap * 2) / 3, eh = 190;
+    // 菜品展示：两列大图
+    const classic = D.classicDishes(S, 6);
+    if (classic.length) {
+      y = secTitle(ctx, W, y, '菜 品 展 示');
+      const imgs = await Promise.all(classic.map((d) => loadImg(photoSrc('dish', d.name))));
+      const gap = 20, cw = (W - 220 - gap) / 2, ih = 250;
+      classic.forEach((d, i) => {
+        const col = i % 2, row = Math.floor(i / 2);
+        const x = 110 + col * (cw + gap), yy = y + row * (ih + 96 + gap);
+        drawPhotoBox(ctx, imgs[i], x, yy, cw, ih, 14, d.name.slice(0, 1), '');
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#f2e6c9'; ctx.font = '600 29px ' + SERIF;
+        ctx.fillText(truncate(d.name, 10), x + cw / 2, yy + ih + 40);
+        ctx.fillStyle = '#c9a45c'; ctx.font = '20px sans-serif';
+        ctx.fillText(d.price ? ('¥ ' + d.price + ' / 份') : truncate(d.note || '招牌必点', 12), x + cw / 2, yy + ih + 72);
+      });
+      y += Math.ceil(classic.length / 2) * (ih + 96 + gap);
+      y += 20; ornament(ctx, W / 2, y, 360); y += 36;
+    }
+
+    // 环境展示：一宽两半
+    y = secTitle(ctx, W, y, '环 境 展 示');
     const envImgs = await Promise.all([1, 2, 3].map((i) => loadImg(photoSrc('env', i))));
-    const envLabels = ['大厅环境', 'VIP 包厢', '茶歇卡座'];
-    envImgs.forEach((img, i) => {
-      const x = 110 + i * (ew + egap);
-      drawPhotoBox(ctx, img, x, envY, ew, eh, 14, '鲜', '');
-      ctx.textAlign = 'center'; ctx.fillStyle = '#6d6352'; ctx.font = '19px sans-serif';
-      ctx.fillText(envLabels[i], x + ew / 2, envY + eh + 30);
-    });
-    y = envY + eh + 64;
+    const ex = 110, ew = W - 220;
+    drawPhotoBox(ctx, envImgs[0], ex, y, ew, 300, 16, '厅', '');
+    scrimLabel(ctx, '大厅环境', ex, y, ew, 300);
+    const hw = (ew - 20) / 2;
+    drawPhotoBox(ctx, envImgs[1], ex, y + 318, hw, 230, 14, '厢', '');
+    scrimLabel(ctx, 'VIP 包厢', ex, y + 318, hw, 230);
+    drawPhotoBox(ctx, envImgs[2], ex + hw + 20, y + 318, hw, 230, 14, '茶', '');
+    scrimLabel(ctx, '茶歇卡座', ex + hw + 20, y + 318, hw, 230);
+    y += 318 + 230 + 44;
+    ornament(ctx, W / 2, y, 360); y += 36;
 
     // 专属服务经理
     const mgrName = shop.managerName || '';
     const mgrPhone = shop.managerPhone || shop.phone || '';
-    roundRect(ctx, 110, y, W - 220, 148, 18);
-    ctx.fillStyle = '#fffdf9'; ctx.fill();
+    const mx = 110, mw = W - 220, mh = 148;
+    roundRect(ctx, mx, y, mw, mh, 18);
+    ctx.fillStyle = 'rgba(251,248,241,.97)'; ctx.fill();
     ctx.strokeStyle = '#d9bd85'; ctx.lineWidth = 1.5; ctx.stroke();
     const mgrImg = await loadImg(photoSrc('manager'));
-    drawPhotoBox(ctx, mgrImg, 138, y + 24, 100, 100, 50, (mgrName || shop.shopName || '鲜').slice(0, 1), '');
+    drawPhotoBox(ctx, mgrImg, mx + 26, y + 24, 100, 100, 50, (mgrName || shop.shopName || '鲜').slice(0, 1), '');
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#8a8070'; ctx.font = '18px sans-serif';
-    ctx.fillText('YOUR PRIVATE MANAGER', 262, y + 40);
-    ctx.fillStyle = '#1f3a32'; ctx.font = '600 34px "Songti SC","STSong","SimSun",serif';
-    ctx.fillText((mgrName ? mgrName : (shop.shopName || '长季鲜')) + ' · ' + (shop.managerTitle || '包厢服务经理'), 262, y + 84);
+    ctx.fillStyle = '#b8893f'; ctx.font = '17px sans-serif';
+    ctx.fillText('YOUR PRIVATE MANAGER', mx + 150, y + 42);
+    ctx.fillStyle = '#1f3a32'; ctx.font = '600 35px ' + SERIF;
+    ctx.fillText((mgrName || shop.shopName || '长季鲜') + ' · ' + (shop.managerTitle || '包厢服务经理'), mx + 150, y + 86);
     ctx.fillStyle = '#a9721c'; ctx.font = '22px sans-serif';
-    ctx.fillText(mgrPhone ? ('订座 / 服务专线：' + mgrPhone) : '全程一对一服务，预订事宜随叫随到', 262, y + 122);
-    if (mgrPhone) {
-      roundRect(ctx, W - 110 - 148, y + 48, 148, 52, 26);
-      ctx.fillStyle = '#1f3a32'; ctx.fill();
-      ctx.textAlign = 'center'; ctx.fillStyle = '#f7f3ea'; ctx.font = '21px sans-serif';
-      ctx.fillText('电话联系', W - 110 - 74, y + 81);
-    }
-    y += 172;
+    ctx.fillText(mgrPhone ? ('订座 / 服务专线：' + mgrPhone) : '全程一对一服务，预订事宜随叫随到', mx + 150, y + 124);
+    y += mh + 22;
 
     // 店招广告位
-    roundRect(ctx, 110, y, W - 220, 150, 18);
-    ctx.fillStyle = '#1b332c'; ctx.fill();
-    ctx.strokeStyle = '#c9a45c'; ctx.lineWidth = 2.5; ctx.stroke();
+    roundRect(ctx, mx, y, mw, 138, 18);
+    ctx.fillStyle = '#0e221b'; ctx.fill();
+    ctx.strokeStyle = '#c9a45c'; ctx.lineWidth = 2; ctx.stroke();
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#e7d6ae'; ctx.font = '700 44px "Songti SC","STSong","SimSun",serif';
-    ctx.fillText(shop.shopName || '长季鲜', W / 2, y + 58);
-    ctx.fillStyle = 'rgba(231,214,174,.85)'; ctx.font = '23px sans-serif';
-    ctx.fillText((shop.slogan || '时令海鲜 · 私厨家宴') + (shop.adText ? '　|　' + truncate(shop.adText, 18) : ''), W / 2, y + 96);
-    ctx.fillStyle = 'rgba(231,214,174,.58)'; ctx.font = '18px sans-serif';
-    ctx.fillText('店招广告位 · 可替换为门店实景 / 合作广告', W / 2, y + 128);
-    y += 174;
+    ctx.fillStyle = '#e7d6ae'; ctx.font = '700 42px ' + SERIF;
+    ctx.fillText(shop.shopName || '长季鲜', W / 2, y + 54);
+    ctx.fillStyle = 'rgba(231,214,174,.85)'; ctx.font = '22px sans-serif';
+    ctx.fillText((shop.slogan || '时令海鲜 · 私厨家宴') + (shop.adText ? '　|　' + truncate(shop.adText, 18) : ''), W / 2, y + 90);
+    ctx.fillStyle = 'rgba(231,214,174,.5)'; ctx.font = '16px sans-serif';
+    ctx.fillText('店招广告位 · 可替换为门店实景 / 合作广告', W / 2, y + 118);
+    y += 138 + 22;
 
-    // 地址 + 导航按钮（不再放导航二维码，改成地址卡 + 导航按钮引导）
-    roundRect(ctx, 110, y, W - 220, 178, 18);
-    ctx.fillStyle = '#fffdf9'; ctx.fill();
-    ctx.strokeStyle = '#e7ddca'; ctx.lineWidth = 1.5; ctx.stroke();
+    // 地址
+    roundRect(ctx, mx, y, mw, 128, 18);
+    ctx.fillStyle = 'rgba(251,248,241,.97)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(217,189,133,.6)'; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#4f4a40'; ctx.font = '24px sans-serif';
-    const addr = shop.address || '';
-    const addrLines = wrapLines(ctx, (addr ? '地址：' + addr : '地址：' + (shop.shopName || '')), W - 260, 2);
-    addrLines.forEach((line, i) => { ctx.fillText(line, W / 2, y + 46 + i * 32); });
-    const navBtnY = y + (addrLines.length > 1 ? 96 : 78);
-    roundRect(ctx, W / 2 - 180, navBtnY, 360, 58, 29);
-    ctx.fillStyle = '#1f3a32'; ctx.fill();
-    ctx.fillStyle = '#f2e6c9'; ctx.font = '600 25px sans-serif';
-    ctx.fillText('一键导航 · 高德地图到店', W / 2, navBtnY + 38);
-    ctx.fillStyle = '#8a8070'; ctx.font = '17px sans-serif';
-    ctx.fillText('打开链接版邀请函可直接点导航；或在高德地图搜「' + truncate(shop.shopName || '长季鲜', 8) + '」', W / 2, y + 168);
-    y += 202;
+    ctx.fillStyle = '#4f4a40'; ctx.font = '26px ' + SERIF;
+    const addrLines = wrapLines(ctx, shop.address || (shop.shopName + '（设置里填门店地址）'), W - 280, 2);
+    addrLines.forEach((line, i) => { ctx.fillText(line, W / 2, y + 46 + i * 36); });
+    ctx.fillStyle = '#8a8070'; ctx.font = '20px sans-serif';
+    ctx.fillText('打开电子邀请函可一键导航（高德 / 百度）', W / 2, y + 112);
+    y += 128 + 28;
 
-    // 回执二维码（单码居中）
+    // 电子邀请函二维码（替代原回执码：扫码打开手机版邀请函，可点导航）
     const qrSize = 210;
     const qr = await makeQrCanvas(pageLink('invite.html', { d: b64e(JSON.stringify(invitePayload(o))) }), qrSize);
     if (qr) {
-      roundRect(ctx, W / 2 - 125, y - 12, 250, 250, 16);
+      roundRect(ctx, W / 2 - 125, y, 250, 250, 16);
       ctx.fillStyle = '#fffdf9'; ctx.fill(); ctx.strokeStyle = '#d9bd85'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.drawImage(qr, W / 2 - qrSize / 2, y + 8, qrSize, qrSize);
-      ctx.textAlign = 'center'; ctx.fillStyle = '#6d6352'; ctx.font = '20px sans-serif';
-      ctx.fillText('扫码回执 · 填到场人数与忌口', W / 2, y + 264);
-      y += 296;
-    } else {
-      ctx.textAlign = 'center'; ctx.fillStyle = '#8a8070'; ctx.font = '22px sans-serif';
-      ctx.fillText('在线回执请让主人家发链接', W / 2, y + 100);
-      y += 130;
-    }
+      ctx.drawImage(qr, W / 2 - qrSize / 2, y + 20, qrSize, qrSize);
+      y += 258;
+      ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(247,243,234,.85)'; ctx.font = '21px sans-serif';
+      ctx.fillText('扫码打开电子邀请函 · 手机上可一键导航', W / 2, y + 8);
+      y += 40;
+    } else { y += 30; }
+
+    // 页脚
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#8a8070'; ctx.font = '20px sans-serif';
-    ctx.fillText((shop.phone ? '订座 ' + shop.phone + '　' : '') + (shop.businessHours || '') + '　·　' + (shop.shopName || '长季鲜'), W / 2, H - 92);
-    return c.toDataURL('image/png');
+    ctx.fillStyle = 'rgba(231,214,174,.8)'; ctx.font = '23px ' + SERIF;
+    ctx.fillText((shop.phone ? '订座 ' + shop.phone + '（' + (mgrName || '陈锦长') + '）　' : '') + (shop.businessHours || ''), W / 2, y + 6);
+    ctx.fillStyle = '#c9a45c'; ctx.font = '600 27px ' + SERIF;
+    ctx.fillText((shop.shopName || '长季鲜') + ' · 敬约', W / 2, y + 48);
+    y += 74;
+
+    // 按内容裁剪
+    const out = document.createElement('canvas'); out.width = W; out.height = Math.max(1200, Math.ceil(y));
+    out.getContext('2d').drawImage(c, 0, 0);
+    return out.toDataURL('image/png');
   }
   async function openInvitePoster(id) {
     const o = alive(S.orders).find((x) => x.id === id);
@@ -2137,11 +2151,11 @@
       const safeName = String(o.customerName || '贵客').replace(/[\\/:*?"<>|]/g, '');
       const host = location.hostname || '';
       const badHost = location.protocol === 'file:' || host === 'localhost' || host === '127.0.0.1';
-      openSheet('<h3>微信邀请函图片</h3><p class="sheet-sub">保存图片直接发微信，客人打开就能看，不需要点链接；需要在线回执时再扫图里的二维码。</p>' +
+      openSheet('<h3>邀请函图片</h3><p class="sheet-sub">保存后像请柬一样直接转发微信；客人扫图里的码可打开手机版，一键导航到店。</p>' +
         (badHost ? '<div class="alert-line" style="margin-bottom:10px">' + I.alert + '<div><b>当前是本地地址，图里二维码手机扫不到。</b>正式部署后重新生成，或改用局域网 IP 打开再生成。</div></div>' : '') +
         '<img src="' + data + '" alt="邀请函" style="width:100%;border-radius:12px;border:1px solid var(--line);display:block">' +
         '<div class="btn-row mt8"><a class="btn primary" download="长季鲜邀请函-' + esc(safeName) + '-' + o.date + '.png" href="' + data + '">保存图片</a><button class="btn soft" data-act="close-sheet">关闭</button></div>' +
-        '<div class="hint">在微信里长按图片 → 保存图片 / 转发给朋友。亲友如果不想扫码，直接在微信里回复忌口也可以，店长再录入。</div>');
+        '<div class="hint">在微信里长按图片 → 保存图片 / 转发给朋友。亲友的忌口可以直接在微信里回复，店长在订单里备注即可。</div>');
     } catch (e) {
       toast('邀请函图片生成失败，请重试');
     }
@@ -2171,19 +2185,24 @@
       saveState();
     }
     const link = pageLink('invite.html', { d: b64e(JSON.stringify(invitePayload(o))) });
-    const nav = D.navUrlOf(S.settings);
-    const addr = S.settings.address ? '\n地址：' + S.settings.address : '';
-    const navLine = nav ? '\n导航：' + nav : '';
-    const msg = S.settings.shopName + ' 诚邀您 ' + D.fmtDateCN(o.date) + ' ' + o.time + ' 到店，' + (roomName(o.roomId) || '') + '，' + (o.partySize || '') + ' 位。' + addr + navLine + '\n邀请函：' + link + '\n请把链接转给同席亲友，方便提前准备忌口。';
-    openSheet('<h3>预定邀请函</h3><p class="sheet-sub">确认菜单后发给主客，主客再转给亲友；邀请函带地址、一键导航和招牌菜。</p>' +
-      '<button class="btn primary block mt8" data-act="invite-poster">' + I.share + ' 生成微信邀请函图片（不用点链接）</button>' +
-      '<div class="hint" style="margin:8px 0 10px">保存图片直接发微信，客人打开就能看；图里带回执二维码和导航二维码。</div>' +
-      '<div class="share-link" id="inviteLinkText">' + esc(link) + '</div>' +
-      '<div class="btn-row mt8"><button class="btn primary" data-act="share-invite" data-link="' + esc(link) + '" data-msg="' + esc(msg) + '">' + I.share + ' 分享到微信</button><button class="btn soft" data-act="preview-invite" data-link="' + esc(link) + '">预览</button></div>' +
-      '<div class="btn-row mt8"><button class="btn soft" data-act="copy-invite" data-link="' + esc(link) + '">复制链接</button><button class="btn soft" data-act="copy-invite-msg" data-msg="' + esc(msg) + '">复制邀请话术</button></div>' +
-      '<button class="btn ghost block mt8" data-act="import-rsvp">已收到回执码？点这里录入</button>' +
+    const s = S.settings;
+    const L = [];
+    L.push('【' + (s.shopName || '长季鲜') + ' · 邀请函】');
+    L.push((orderName(o) || '您好') + '，谨订于 ' + D.fmtDateCN(o.date) + ' ' + D.weekdayCN(o.date) + ' ' + (o.time || '') + '，在 ' + (s.shopName || '长季鲜') + ' ' + (roomName(o.roomId) || '') + ' 敬备菲酌，恭候台光。');
+    if (s.address) L.push('地址：' + s.address + '（高德 / 百度地图搜「' + (s.shopName || '长季鲜') + '」可导航）');
+    if (s.managerPhone) L.push('订座：' + s.managerPhone + (s.managerName ? '（' + s.managerName + '）' : ''));
+    L.push('电子邀请函（手机打开可一键导航）：');
+    L.push(link);
+    L.push('欢迎转发给同席亲友。');
+    const msg = L.join('\n');
+    openSheet('<h3>预定邀请函</h3><p class="sheet-sub">最推荐发图片版：像一张请柬，微信里直接转发；链接版手机打开可一键导航。</p>' +
+      '<button class="btn primary block mt8" data-act="invite-poster">' + I.share + ' 生成邀请函图片（微信直接转发）</button>' +
+      '<div class="hint" style="margin:8px 0 12px">点「保存图片」后，在微信里长按图片 → 转发给朋友，客人不用点任何链接。</div>' +
+      '<button class="btn gold block" data-act="share-invite" data-link="' + esc(link) + '" data-msg="' + esc(msg) + '">' + I.share + ' 转发链接版（手机上弹出微信）</button>' +
+      '<div class="btn-row mt8"><button class="btn soft" data-act="preview-invite" data-link="' + esc(link) + '">预览链接版</button><button class="btn soft" data-act="copy-invite-msg" data-msg="' + esc(msg) + '">复制邀请文案</button></div>' +
+      '<button class="btn ghost block mt8" data-act="copy-invite" data-link="' + esc(link) + '">复制链接</button>' +
       '<button class="btn ghost block mt8" data-act="close-sheet">关闭</button>' +
-      '<div class="hint">' + (syncReady() ? '当前是云端同步模式，亲友提交回执会自动回写。' : '当前是本地模式：亲友提交后会生成一段回执码，复制回来在订单里录入即可。') + (S.settings.address ? '' : ' 先在设置里填门店地址，邀请函会自动带定位和导航。') + '</div>');
+      '<div class="share-link" id="inviteLinkText" style="position:absolute;left:-9999px;top:0">' + esc(link) + '</div>');
   }
   function buildMenuPayload() {
     const sync = (window.CJXSync && window.CJXSync.isAuthed()) ? window.CJXSync.getConfig() : null;
@@ -2808,7 +2827,7 @@
       '② 订单里点「转给店长配菜」，复制话术发给店长；店长首页会出现「待我配菜」。<br>' +
       '③ 店长点「AI 自动配菜 + 排包厢」：只要有<b>人数 + 餐标</b>，系统出三套菜单，并按人数自动排包厢（VIP1/VIP2 坐 10–12 人，VIP3 坐 15–18 人）。<br>' +
       '④ 店长「发给老板确认」→ 老板「转发给客户确认」→ 客户回话后点「客户已确认菜品」。<br>' +
-      '⑤ 老板或店长「生成/发送邀请函」：带地址、导航二维码、店招广告位和经典菜品，客户可转给同席亲友回执。<br><br>' +
+      '⑤ 老板或店长「生成/发送邀请函」：图片版像请柬一样转发微信，带地址、一键导航、店招广告位和招牌菜；亲友忌口微信里回复，店长在订单里备注。<br><br>' +
       '<b>权限</b><br>' +
       '老板：接单、审核、改菜单、上下架、AI 配菜、发客户、邀请函。<b>菜价只有店长能改</b>。<br>' +
       '店长：上下架、改菜、改菜价、AI 配菜、备货单、审核、邀请函。<br>' +

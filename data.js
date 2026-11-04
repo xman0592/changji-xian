@@ -2,7 +2,7 @@
 (function (global) {
   'use strict';
 
-  const APP_VERSION = '1.3.3';
+  const APP_VERSION = '1.4.0';
   const CATEGORIES = ['冷菜', '热菜', '汤', '主食', '甜品'];
 
   const DIET_OPTIONS = ['无忌口', '海鲜过敏', '不吃海鲜', '素食', '不吃辣', '不吃牛羊肉', '不吃猪肉', '不吃蛋', '坚果过敏', '不吃香菜', '少油少盐', '控糖'];
@@ -156,13 +156,13 @@
       cuisine: '福安菜 × 厦门海鲜',
       businessHours: '17:00–22:00',
       address: '厦门市湖里区天地建材城综合楼东侧二楼',
-      phone: '',
+      phone: '18950071506',
       slogan: '时令海鲜 · 私厨家宴',
       adText: '',
       lat: '',
       lng: '',
-      managerName: '',
-      managerPhone: '',
+      managerName: '陈锦长',
+      managerPhone: '18950071506',
       managerTitle: '包厢服务经理',
       pins: { boss: '', manager: '', kitchen: '', service: '' },
       backupReminderDays: 7,
@@ -669,6 +669,21 @@
     }
     return '';
   }
+  // 双地图导航链接：高德 + 百度，客户手机里装了哪个点哪个
+  function navUrlsOf(settings) {
+    const s = settings || {};
+    const kw = ((s.shopName || '') + ' ' + (s.address || '')).trim();
+    if (!kw) return null;
+    const out = { amap: '', baidu: '' };
+    if (s.lat && s.lng) {
+      out.amap = 'https://uri.amap.com/marker?position=' + encodeURIComponent(s.lng + ',' + s.lat) + '&name=' + encodeURIComponent(s.shopName || '长季鲜') + '&callnative=1&src=changjixian';
+      out.baidu = 'https://api.map.baidu.com/marker?location=' + encodeURIComponent(s.lat + ',' + s.lng) + '&title=' + encodeURIComponent(s.shopName || '长季鲜') + '&content=' + encodeURIComponent(s.address || '') + '&output=html&src=changjixian';
+    } else {
+      out.amap = 'https://uri.amap.com/search?keyword=' + encodeURIComponent(kw) + '&callnative=1&src=changjixian';
+      out.baidu = 'https://api.map.baidu.com/geocoder?address=' + encodeURIComponent(s.address || s.shopName || '') + '&output=html&src=changjixian';
+    }
+    return out;
+  }
   function dishByName(S, name) {
     return (S.dishes || []).find((d) => d.name === name);
   }
@@ -678,7 +693,7 @@
     uid, nowISO, todayStr, addDays, dayDiff, fmtDateCN, weekdayCN, relativeDay, money, timeText, pad,
     defaultState, defaultDishes, defaultRooms, defaultSettings,
     findCustomer, favDishesOf, learnCustomer, dishObjs, dishByName, roomName,
-    phoneTail, roomCap, roomCapText, classicDishes, navUrlOf,
+    phoneTail, roomCap, roomCapText, classicDishes, navUrlOf, navUrlsOf,
     parseChat, budgetTotalOf, generateMenus, orderTotal, eligibleDishes, dietExcludes
   };
 })(window);

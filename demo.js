@@ -14,13 +14,13 @@
     S.settings.shopName = '长季鲜';
     S.settings.subtitle = '私厨会所';
     S.settings.address = '厦门市湖里区天地建材城综合楼东侧二楼';
-    S.settings.phone = '0593-6688999';
+    S.settings.phone = '18950071506';
     S.settings.slogan = '时令海鲜 · 私厨家宴';
     S.settings.adText = '本月主打：下白石鲟 · 承接寿宴';
     S.settings.lat = '';
     S.settings.lng = '';
-    S.settings.managerName = '陈经理';
-    S.settings.managerPhone = '13805926688';
+    S.settings.managerName = '陈锦长';
+    S.settings.managerPhone = '18950071506';
     S.settings.managerTitle = '包厢服务经理';
 
     const customers = [
