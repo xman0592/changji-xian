@@ -814,13 +814,3 @@ button.svc-btn:active { background: #eef3ee; }
 .svc-btn .svc-unit { font-size: 10px; color: var(--muted-2); margin-left: 1px; }
 .svc-btn { padding: 6px 8px; font-size: 11.5px; }
 
-/* 微信笔记素材弹层 */
-.note-steps { margin: 6px 0 4px; }
-.note-steps .step { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; }
-.note-steps .step + .step { border-top: 1px dashed var(--line, #e5decf); }
-.note-steps .no { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; background: #b8893f; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
-.note-steps .step b { font-size: 13px; }
-.note-steps .step .muted { font-size: 11.5px; color: var(--muted, #8a8070); line-height: 1.55; }
-.note-preview { margin-top: 10px; }
-.note-preview summary { font-size: 12.5px; color: #8a8070; cursor: pointer; padding: 6px 0; }
-.note-preview pre { background: #f7f3ea; border: 1px solid #e5decf; border-radius: 10px; padding: 12px; font-size: 12px; line-height: 1.7; white-space: pre-wrap; word-break: break-all; font-family: inherit; margin: 6px 0; }

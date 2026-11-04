@@ -2,7 +2,7 @@
 (function (global) {
   'use strict';
 
-  const APP_VERSION = '1.4.1';
+  const APP_VERSION = '1.4.2';
   const CATEGORIES = ['冷菜', '热菜', '汤', '主食', '甜品'];
 
   const DIET_OPTIONS = ['无忌口', '海鲜过敏', '不吃海鲜', '素食', '不吃辣', '不吃牛羊肉', '不吃猪肉', '不吃蛋', '坚果过敏', '不吃香菜', '少油少盐', '控糖'];
@@ -658,6 +658,18 @@
       .slice(0, limit || 4)
       .map((d) => ({ name: d.name, note: d.note || '', price: Number(d.price) || 0 }));
   }
+  // 从详细地址里提取建筑名（二维码等对链接长度敏感的场景用）
+  function shortPlace(addr) {
+    const rest = String(addr || '')
+      .replace(/^[^省市自治区]{0,10}(省|自治区)/, '')
+      .replace(/^[^市]{0,10}市/, '')
+      .replace(/^[^区县]{0,10}(区|县)/, '')
+      .replace(/^[^镇街]{0,10}(镇|街道)/, '')
+      .replace(/[（(，,].*$/, '')
+      .trim();
+    const m = rest.slice(0, 16).match(/^(.{2,12}?(?:大厦|广场|中心|商城|建材城|城|楼|苑|里|花园|酒店))/);
+    return m ? m[1] : rest.slice(0, 8);
+  }
   // 高德地图导航：有经纬度用标点，否则用店名 + 地址搜索
   function navUrlOf(settings) {
     const s = settings || {};
@@ -668,6 +680,16 @@
       return 'https://uri.amap.com/search?keyword=' + encodeURIComponent((s.shopName || '') + ' ' + s.address) + '&callnative=1&src=changjixian';
     }
     return '';
+  }
+  // 二维码专用短链接：只带「店名 + 建筑名」，二维码模块少一半，图片压缩后仍能扫
+  function navUrlShort(settings) {
+    const s = settings || {};
+    if (s.lat && s.lng) {
+      return 'https://uri.amap.com/marker?position=' + encodeURIComponent(String(s.lng).slice(0, 8) + ',' + String(s.lat).slice(0, 8)) + '&name=' + encodeURIComponent(s.shopName || '长季鲜') + '&callnative=1';
+    }
+    const kw = ((s.shopName || '') + ' ' + shortPlace(s.address)).trim();
+    if (!kw) return '';
+    return 'https://uri.amap.com/search?keyword=' + encodeURIComponent(kw) + '&callnative=1';
   }
   // 双地图导航链接：高德 + 百度，客户手机里装了哪个点哪个
   function navUrlsOf(settings) {
@@ -693,7 +715,7 @@
     uid, nowISO, todayStr, addDays, dayDiff, fmtDateCN, weekdayCN, relativeDay, money, timeText, pad,
     defaultState, defaultDishes, defaultRooms, defaultSettings,
     findCustomer, favDishesOf, learnCustomer, dishObjs, dishByName, roomName,
-    phoneTail, roomCap, roomCapText, classicDishes, navUrlOf, navUrlsOf,
+    phoneTail, roomCap, roomCapText, classicDishes, navUrlOf, navUrlsOf, navUrlShort, shortPlace,
     parseChat, budgetTotalOf, generateMenus, orderTotal, eligibleDishes, dietExcludes
   };
 })(window);
