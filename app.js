@@ -1867,14 +1867,14 @@
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
   }
-  function makeQrCanvas(text, size) {
+  function makeQrCanvas(text, size, level) {
     return new Promise((resolve) => {
       if (typeof QRCode === 'undefined') return resolve(null);
       const box = document.createElement('div');
       box.style.cssText = 'position:fixed;left:-9999px;top:0;width:' + size + 'px;height:' + size + 'px';
       document.body.appendChild(box);
       try {
-        new QRCode(box, { text: text, width: size, height: size, colorDark: '#1f3a32', colorLight: '#fffdf9', correctLevel: QRCode.CorrectLevel.L });
+        new QRCode(box, { text: text, width: size, height: size, colorDark: '#1f3a32', colorLight: '#fffdf9', correctLevel: level || QRCode.CorrectLevel.L });
       } catch (e) { box.remove(); return resolve(null); }
       setTimeout(() => {
         try {
@@ -2113,21 +2113,23 @@
     const addrLines = wrapLines(ctx, shop.address || (shop.shopName + '（设置里填门店地址）'), W - 280, 2);
     addrLines.forEach((line, i) => { ctx.fillText(line, W / 2, y + 46 + i * 36); });
     ctx.fillStyle = '#8a8070'; ctx.font = '20px sans-serif';
-    ctx.fillText('高德 / 百度地图搜「' + (shop.shopName || '长季鲜') + '」可导航', W / 2, y + 112);
+    ctx.fillText('腾讯 / 高德 / 百度地图搜「' + (shop.shopName || '长季鲜') + '」可导航', W / 2, y + 112);
     y += 128 + 34;
 
-    // 导航二维码：短链接（高德），密度低、图片压缩后仍可扫
-    const navUrl = D.navUrlShort(shop) || D.navUrlOf(shop);
+    // 导航二维码：微信专用腾讯地图短链（微信里长按识别直接打开地图，不拦外部 App）
+    // 纠错等级 M + 加大留白，微信转发压缩后仍可扫
+    const navUrl = D.navUrlWXShort(shop) || D.navUrlWX(shop) || D.navUrlShort(shop) || D.navUrlOf(shop);
     if (navUrl) {
-      const qrSize = 262;
-      const qr = await makeQrCanvas(navUrl, qrSize);
+      // 343 = 49 模块 × 7px，整数倍渲染无虚边，微信转发压缩缩小后依然锐利
+      const qrSize = 343;
+      const qr = await makeQrCanvas(navUrl, qrSize, QRCode.CorrectLevel.M);
       if (qr) {
-        roundRect(ctx, W / 2 - 151, y, 302, 302, 18);
+        roundRect(ctx, W / 2 - 201, y, 402, 402, 18);
         ctx.fillStyle = '#fffdf9'; ctx.fill(); ctx.strokeStyle = '#d9bd85'; ctx.lineWidth = 2; ctx.stroke();
-        ctx.drawImage(qr, W / 2 - qrSize / 2, y + 20, qrSize, qrSize);
-        y += 302 + 46;
+        ctx.drawImage(qr, W / 2 - qrSize / 2, y + 30, qrSize, qrSize);
+        y += 402 + 46;
         ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(247,243,234,.9)'; ctx.font = '22px sans-serif';
-        ctx.fillText('扫 码 一 键 导 航 到 店', W / 2, y + 8);
+        ctx.fillText('微 信 长 按 识 别 · 一 键 导 航 到 店', W / 2, y + 8);
         y += 64;
       } else { y += 30; }
     } else { y += 20; }

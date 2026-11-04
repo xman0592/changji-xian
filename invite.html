@@ -79,6 +79,7 @@
   .locate a.nav { display:flex; align-items:center; justify-content:center; gap:6px; min-height:46px; border-radius:12px; background:linear-gradient(135deg,#c39a4f,#b8893f); color:#fff; text-decoration:none; font-size:14px; font-weight:600; box-shadow:0 6px 16px rgba(184,137,63,.28); }
   .locate a.nav:active { filter:brightness(.95); }
   .locate a.nav.ghost { background:transparent; border:1.5px solid rgba(184,137,63,.5); color:var(--gold); box-shadow:none; }
+  .locate .navs a.nav:nth-child(3) { grid-column:1 / -1; }
   .locate .hint2 { font-size:10.5px; color:var(--muted); margin-top:9px; text-align:center; }
   .locate button.copy { width:100%; margin-top:9px; min-height:38px; border-radius:11px; border:1px dashed #d9cdb6; background:#fdfbf6; color:#6d6352; font-size:12.5px; font-family:inherit; }
   .foot { text-align:center; color:rgba(247,243,234,.55); font-size:11.5px; line-height:1.9; margin-top:22px; }
@@ -115,11 +116,21 @@
     }
     return { shop:P.shop||{}, classic:P.classic||[], order:P.order||{} };
   }
-  // 双地图导航：高德 + 百度，装了哪个点哪个
+  // 从详细地址提取建筑名（与 data.js shortPlace 一致），地图搜索命中率更高
+  function shortPlace(addr){
+    const rest=String(addr||'').replace(/^[^省市自治区]{0,10}(省|自治区)/,'').replace(/^[^市]{0,10}市/,'')
+      .replace(/^[^区县]{0,10}(区|县)/,'').replace(/^[^镇街]{0,10}(镇|街道)/,'').replace(/[（(，,].*$/,'').trim();
+    const m=rest.slice(0,16).match(/^(.{2,12}?(?:大厦|广场|中心|商城|建材城|城|楼|苑|里|花园|酒店))/);
+    return m?m[1]:rest.slice(0,8);
+  }
+  // 三地图导航：腾讯（微信内体验最佳，不会被拦）+ 高德 + 百度，装了哪个点哪个
   function navUrls(shop){
     const kw=((shop.name||'')+' '+(shop.address||'')).trim();
     if(!kw) return null;
+    const city=((shop.address||'').match(/([一-龥]{2,6}市)/)||[])[1]||'厦门市';
+    const kwShort=((shop.name||'')+' '+(shortPlace(shop.address)||'')).trim();
     return {
+      qq:'https://apis.map.qq.com/uri/v1/search?keyword='+encodeURIComponent(kwShort||kw)+'&region='+encodeURIComponent(city)+'&referer=cjx',
       amap:'https://uri.amap.com/search?keyword='+encodeURIComponent(kw)+'&callnative=1&src=changjixian',
       baidu:'https://api.map.baidu.com/geocoder?address='+encodeURIComponent(shop.address||shop.name||'')+'&output=html&src=changjixian'
     };
@@ -161,10 +172,11 @@
         '<div class="pic half">'+imgTag('photos/env-3.jpg')+'<span>茶歇卡座</span></div></div></div>'+
       ((mgr.name||mgr.phone)?'<div class="sec-title">专 属 服 务 经 理</div><div class="manager"><div class="avatar">'+imgTag('photos/manager.jpg')+esc((mgr.name||shop.name||'鲜').slice(0,1))+'</div><div class="info"><i>PRIVATE MANAGER</i><b>'+esc(mgr.name||shop.name||'长季鲜')+'</b><span>'+esc(mgr.title||'包厢服务经理')+(mgr.phone?(' · '+esc(mgr.phone)):'')+'</span></div>'+(mgr.phone?'<a class="call" href="tel:'+esc(mgr.phone)+'">电话联系</a>':'')+'</div>':'')+
       ((shop.address||nav)?'<div class="sec-title">地 址 与 导 航</div><div class="locate"><div class="addr">'+esc(shop.address||'')+'</div>'+
-        (nav?'<div class="navs"><a class="nav" href="'+esc(nav.amap)+'" target="_blank" rel="noopener">高德地图 · 一键导航</a>'+
+        (nav?'<div class="navs"><a class="nav" href="'+esc(nav.qq)+'" target="_blank" rel="noopener">腾讯地图 · 一键导航</a>'+
+        '<a class="nav ghost" href="'+esc(nav.amap)+'" target="_blank" rel="noopener">高德地图 · 一键导航</a>'+
         '<a class="nav ghost" href="'+esc(nav.baidu)+'" target="_blank" rel="noopener">百度地图 · 一键导航</a></div>':'')+
         (shop.address?'<button class="copy" id="copyAddr">复制地址（发给司机 / 打车用）</button>':'')+
-        '<div class="hint2">手机装了高德或百度地图，点按钮直接导航到店。</div></div>':'')+
+        '<div class="hint2">微信里点「腾讯地图」直接导航不跳转；装了高德 / 百度地图也可以一键到店。</div></div>':'')+
       '</div></div>';
     const foot='<div class="foot"><b>'+esc(shop.name||'长季鲜')+' · 敬约</b>'+(shop.address?'<br>'+esc(shop.address):'')+(shop.hours?'<br>'+esc(shop.hours):'')+(shop.phone?'<br>订座 <a href="tel:'+esc(shop.phone)+'">'+esc(shop.phone)+'</a>':'')+'</div>';
     $('#app').innerHTML=html;

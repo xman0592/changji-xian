@@ -2,7 +2,7 @@
 (function (global) {
   'use strict';
 
-  const APP_VERSION = '1.4.2';
+  const APP_VERSION = '1.4.3';
   const CATEGORIES = ['冷菜', '热菜', '汤', '主食', '甜品'];
 
   const DIET_OPTIONS = ['无忌口', '海鲜过敏', '不吃海鲜', '素食', '不吃辣', '不吃牛羊肉', '不吃猪肉', '不吃蛋', '坚果过敏', '不吃香菜', '少油少盐', '控糖'];
@@ -691,6 +691,38 @@
     if (!kw) return '';
     return 'https://uri.amap.com/search?keyword=' + encodeURIComponent(kw) + '&callnative=1';
   }
+  // 微信专用导航链接（腾讯地图 URI）：微信里扫码 / 点链接直接打开地图页，
+  // 不会被微信拦外部 App 跳转，体验比高德 / 百度链接好
+  function cityOf(addr) {
+    const m = String(addr || '').match(/([一-龥]{2,6}市)/);
+    return m ? m[1] : '厦门市';
+  }
+  function navUrlWX(settings) {
+    const s = settings || {};
+    if (s.lat && s.lng) {
+      return 'https://apis.map.qq.com/uri/v1/marker?marker=' +
+        encodeURIComponent('coord:' + s.lat + ',' + s.lng + ';title:' + (s.shopName || '长季鲜') + ';addr:' + (s.address || '')) +
+        '&referer=cjx';
+    }
+    const kw = ((s.shopName || '') + ' ' + (s.address || '')).trim();
+    if (!kw) return '';
+    return 'https://apis.map.qq.com/uri/v1/search?keyword=' + encodeURIComponent(kw) +
+      '&region=' + encodeURIComponent(cityOf(s.address)) + '&referer=cjx';
+  }
+  // 二维码专用微信短链：只带「建筑名」（店名未必被地图收录，建筑名才是可靠 POI）。
+  // 注意：腾讯地图 uri/v1/search 必须带 region，否则落地页提示"请选择检索方式"打不开地图。
+  function navUrlWXShort(settings) {
+    const s = settings || {};
+    if (s.lat && s.lng) {
+      return 'https://apis.map.qq.com/uri/v1/marker?marker=' +
+        encodeURIComponent('coord:' + String(s.lat).slice(0, 8) + ',' + String(s.lng).slice(0, 8) + ';title:' + (s.shopName || '长季鲜')) +
+        '&referer=cjx';
+    }
+    const kw = shortPlace(s.address) || (s.shopName || '');
+    if (!kw) return '';
+    return 'https://apis.map.qq.com/uri/v1/search?keyword=' + encodeURIComponent(kw) +
+      '&region=' + encodeURIComponent(cityOf(s.address)) + '&referer=cjx';
+  }
   // 双地图导航链接：高德 + 百度，客户手机里装了哪个点哪个
   function navUrlsOf(settings) {
     const s = settings || {};
@@ -715,7 +747,7 @@
     uid, nowISO, todayStr, addDays, dayDiff, fmtDateCN, weekdayCN, relativeDay, money, timeText, pad,
     defaultState, defaultDishes, defaultRooms, defaultSettings,
     findCustomer, favDishesOf, learnCustomer, dishObjs, dishByName, roomName,
-    phoneTail, roomCap, roomCapText, classicDishes, navUrlOf, navUrlsOf, navUrlShort, shortPlace,
+    phoneTail, roomCap, roomCapText, classicDishes, navUrlOf, navUrlsOf, navUrlShort, navUrlWX, navUrlWXShort, shortPlace,
     parseChat, budgetTotalOf, generateMenus, orderTotal, eligibleDishes, dietExcludes
   };
 })(window);
