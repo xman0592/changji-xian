@@ -109,16 +109,20 @@
     toast._t = setTimeout(() => { w.innerHTML = ''; }, 2300);
   }
   async function copyText(text) {
+    const legacy = () => {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      const ok = document.execCommand('copy'); ta.remove();
+      return ok;
+    };
     try {
       if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const ta = document.createElement('textarea');
-        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-        document.body.appendChild(ta); ta.focus(); ta.select();
-        document.execCommand('copy'); ta.remove();
+        try { await navigator.clipboard.writeText(text); toast('已复制'); return; }
+        catch (e) { if (legacy()) { toast('已复制'); return; } throw e; }
       }
-      toast('已复制');
+      if (legacy()) { toast('已复制'); return; }
+      throw new Error('copy failed');
     } catch (e) {
       toast('复制失败，请长按手动复制');
     }
@@ -2199,10 +2203,73 @@
       '<button class="btn primary block mt8" data-act="invite-poster">' + I.share + ' 生成邀请函图片（微信直接转发）</button>' +
       '<div class="hint" style="margin:8px 0 12px">点「保存图片」后，在微信里长按图片 → 转发给朋友，客人不用点任何链接。</div>' +
       '<button class="btn gold block" data-act="share-invite" data-link="' + esc(link) + '" data-msg="' + esc(msg) + '">' + I.share + ' 转发链接版（手机上弹出微信）</button>' +
+      '<button class="btn soft block" data-act="note-material" data-order="' + esc(o.id) + '">📝 做成微信笔记转发（卡片形式）</button>' +
       '<div class="btn-row mt8"><button class="btn soft" data-act="preview-invite" data-link="' + esc(link) + '">预览链接版</button><button class="btn soft" data-act="copy-invite-msg" data-msg="' + esc(msg) + '">复制邀请文案</button></div>' +
       '<button class="btn ghost block mt8" data-act="copy-invite" data-link="' + esc(link) + '">复制链接</button>' +
       '<button class="btn ghost block mt8" data-act="close-sheet">关闭</button>' +
       '<div class="share-link" id="inviteLinkText" style="position:absolute;left:-9999px;top:0">' + esc(link) + '</div>');
+  }
+  /* ---------- 微信笔记素材：请柬文字 + 长图，粘贴到收藏笔记里转发 ---------- */
+  function noteText(o) {
+    const s = S.settings;
+    const dishes = (o.dishes || []).map((d) => (typeof d === 'string' ? d : d.name)).filter(Boolean);
+    const LINE = '━━━━━━━━━━━━';
+    const L = [];
+    L.push('◆ ' + (s.shopName || '长季鲜') + ' · 邀请函');
+    L.push('');
+    L.push('谨呈');
+    L.push((orderName(o) || '贵客') + ' 及同席亲友 台鉴');
+    L.push('');
+    L.push('诚 邀 赴 宴');
+    L.push('敬备菲酌 · 恭候台光');
+    L.push('');
+    L.push('谨订于 ' + D.fmtDateCN(o.date) + ' ' + D.weekdayCN(o.date) + ' ' + (o.time || ''));
+    L.push('席设 ' + (roomName(o.roomId) || '包厢待定') + ' · ' + (o.partySize || '') + ' 位' + (o.occasion ? ' · ' + o.occasion : ''));
+    if (o.special) L.push('特殊安排：' + o.special);
+    if (dishes.length) {
+      L.push('');
+      L.push(LINE);
+      L.push('当 日 菜 单');
+      L.push(LINE);
+      dishes.slice(0, 14).forEach((n) => L.push('· ' + n));
+      if (dishes.length > 14) L.push('（共 ' + dishes.length + ' 道菜，以到店时令为准）');
+    }
+    L.push('');
+    L.push(LINE);
+    L.push('地址 · 导航');
+    L.push(LINE);
+    L.push(s.address || (s.shopName || '长季鲜'));
+    L.push('高德 / 百度地图搜「' + (s.shopName || '长季鲜') + '」可一键导航');
+    const mgrName = s.managerName || '';
+    const mgrPhone = s.managerPhone || s.phone || '';
+    if (mgrName || mgrPhone) {
+      L.push('');
+      L.push('专属服务经理');
+      L.push((mgrName || '店长') + (mgrPhone ? ' · ' + mgrPhone : ''));
+    }
+    if (s.phone) {
+      L.push('');
+      L.push('订座电话：' + s.phone);
+    }
+    L.push('');
+    L.push((s.shopName || '长季鲜') + ' · 敬约');
+    return L.join('\n');
+  }
+  function openNoteMaterial(id) {
+    const o = alive(S.orders).find((x) => x.id === id);
+    if (!o) return;
+    const txt = noteText(o);
+    openSheet('<h3>做成微信笔记转发</h3><p class="sheet-sub">微信里长按图片只能发图、发链接只是一串字。做成「笔记」转发，对方收到的是一张带标题的卡片，点开图文并茂。</p>' +
+      '<div class="note-steps">' +
+      '<div class="step"><span class="no">1</span><div><b>保存邀请函长图</b><br><span class="muted">点下面按钮生成 → 再点「保存图片」</span></div></div>' +
+      '<div class="step"><span class="no">2</span><div><b>复制请柬文字</b><br><span class="muted">点下面按钮，一段排版好的请柬文字就复制好了</span></div></div>' +
+      '<div class="step"><span class="no">3</span><div><b>在微信里拼成笔记</b><br><span class="muted">微信 → 我 → 收藏 → 右上角「＋」→ 长按粘贴文字 → 光标点到文字最后，插入刚保存的长图 → 完成</span></div></div>' +
+      '<div class="step"><span class="no">4</span><div><b>转发</b><br><span class="muted">打开这条笔记 → 右上角「···」→ 发送给朋友 / 群。对方收到的是笔记卡片</span></div></div>' +
+      '</div>' +
+      '<button class="btn primary block mt8" data-act="invite-poster" data-order="' + esc(o.id) + '">' + I.share + ' 第1步：生成邀请函长图</button>' +
+      '<button class="btn gold block" data-act="copy-note-text" data-txt="' + esc(txt) + '">第2步：复制请柬文字</button>' +
+      '<details class="note-preview"><summary>看看文字长什么样（点开预览）</summary><pre>' + esc(txt) + '</pre></details>' +
+      '<button class="btn ghost block mt8" data-act="close-sheet">关闭</button>');
   }
   function buildMenuPayload() {
     const sync = (window.CJXSync && window.CJXSync.isAuthed()) ? window.CJXSync.getConfig() : null;
@@ -2648,7 +2715,9 @@
       case 'save-order': saveOrderForm(); break;
       case 'cancel-form': ui.form = null; back(); break;
       case 'open-invite': openInviteSheet(ui.params.orderId); break;
-      case 'invite-poster': openInvitePoster(ui.params.orderId); break;
+      case 'invite-poster': openInvitePoster(el.dataset.order || ui.params.orderId); break;
+      case 'note-material': openNoteMaterial(el.dataset.order || ui.params.orderId); break;
+      case 'copy-note-text': copyText(el.dataset.txt); break;
       case 'preview-invite': window.open(el.dataset.link, '_blank'); break;
       case 'share-invite': shareInviteLink(el.dataset.link, el.dataset.msg); break;
       case 'copy-invite': copyText(el.dataset.link); break;
