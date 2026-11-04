@@ -236,6 +236,18 @@
       if (!o.flow && (o.dishes || []).length) o.flow = { stage: (o.inviteCode || o.status === 'done') ? 'confirmed' : 'menu', at: o.updatedAt || D.nowISO(), by: '系统迁移', history: [] };
     });
     s.rsvps = Array.isArray(s.rsvps) ? s.rsvps : [];
+    // 门店地址迁移：旧演示地址/空地址 → 厦门新址；旧演示经纬度作废，避免导航定位到错误坐标
+    const addr = String(s.settings.address || '');
+    if (!addr || addr.indexOf('富春大道') >= 0) {
+      s.settings.address = '厦门市湖里区天地建材城综合楼东侧二楼';
+    }
+    const demoCoords = [['27.09', '119.65'], ['24.4923', '118.1318']];
+    demoCoords.forEach(function (c) {
+      if (String(s.settings.lat || '').indexOf(c[0]) === 0 && String(s.settings.lng || '').indexOf(c[1]) === 0) {
+        s.settings.lat = '';
+        s.settings.lng = '';
+      }
+    });
     s.meta.schemaVersion = 3;
     return s;
   }

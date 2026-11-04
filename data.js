@@ -2,7 +2,7 @@
 (function (global) {
   'use strict';
 
-  const APP_VERSION = '1.3.2';
+  const APP_VERSION = '1.3.3';
   const CATEGORIES = ['冷菜', '热菜', '汤', '主食', '甜品'];
 
   const DIET_OPTIONS = ['无忌口', '海鲜过敏', '不吃海鲜', '素食', '不吃辣', '不吃牛羊肉', '不吃猪肉', '不吃蛋', '坚果过敏', '不吃香菜', '少油少盐', '控糖'];
