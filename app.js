@@ -1772,12 +1772,14 @@
         '<div class="field"><label>店名</label><input id="setShopName" type="text" value="' + esc(S.settings.shopName) + '"></div>' +
         '<div class="field"><label>菜系</label><input id="setCuisine" type="text" value="' + esc(S.settings.cuisine || '') + '" placeholder="福安菜 × 厦门海鲜"></div>' +
         '<div class="field"><label>营业时间</label><input id="setHours" type="text" value="' + esc(S.settings.businessHours || '') + '"></div>' +
-        '<div class="field"><label>门店地址（邀请函定位 / 导航用）</label><input id="setAddress" type="text" value="' + esc(S.settings.address || '') + '" placeholder="如：福安市城南街道XX路88号"></div>' +
+        '<div class="field"><label>门店地址（邀请函定位 / 导航用）</label><input id="setAddress" type="text" value="' + esc(S.settings.address || '') + '" placeholder="厦门市湖里区天地建材城综合楼东侧二楼"></div>' +
         '<div class="field"><label>电话</label><input id="setPhone" type="tel" value="' + esc(S.settings.phone || '') + '"></div>' +
         '<div class="field"><label>店招广告语</label><input id="setSlogan" type="text" value="' + esc(S.settings.slogan || '') + '" placeholder="时令海鲜 · 私厨家宴"></div>' +
         '<div class="field"><label>店招广告位文案（选填）</label><input id="setAdText" type="text" value="' + esc(S.settings.adText || '') + '" placeholder="本月主打：下白石鲟 / 承接寿宴"></div>' +
-        '<div class="field-row"><div class="field"><label>纬度（选填）</label><input id="setLat" type="text" inputmode="decimal" value="' + esc(S.settings.lat || '') + '" placeholder="27.09"></div><div class="field"><label>经度（选填）</label><input id="setLng" type="text" inputmode="decimal" value="' + esc(S.settings.lng || '') + '" placeholder="119.65"></div></div>' +
-        '<div class="hint" style="margin:-4px 0 10px">填了经纬度，邀请函里的导航二维码直接定位到门口；只填地址则按「店名 + 地址」搜索。</div>' +
+        '<div class="field-row"><div class="field"><label>服务经理姓名（选填）</label><input id="setManagerName" type="text" value="' + esc(S.settings.managerName || '') + '" placeholder="如：小陈"></div><div class="field"><label>服务经理电话（选填）</label><input id="setManagerPhone" type="tel" value="' + esc(S.settings.managerPhone || '') + '" placeholder="邀请函上可一键拨打"></div></div>' +
+        '<div class="hint" style="margin:-4px 0 10px">填了之后，邀请函会出现「专属服务经理」版块，客人一键拨打电话。</div>' +
+        '<div class="field-row"><div class="field"><label>纬度（选填）</label><input id="setLat" type="text" inputmode="decimal" value="' + esc(S.settings.lat || '') + '" placeholder="24.49"></div><div class="field"><label>经度（选填）</label><input id="setLng" type="text" inputmode="decimal" value="' + esc(S.settings.lng || '') + '" placeholder="118.13"></div></div>' +
+        '<div class="hint" style="margin:-4px 0 10px">填了经纬度，邀请函里的导航按钮直接定位到门口；只填地址则按「店名 + 地址」搜索。</div>' +
         '<button class="btn primary sm" data-act="save-shop">保存门店信息</button></div>' +
       '<div class="form-card"><h3>包厢 · ' + enabledRooms().length + '</h3>' +
         alive(S.rooms).sort((a, b) => (a.sort || 0) - (b.sort || 0)).map((r) => '<div class="room-edit"><div class="field" style="margin:0"><label>名称</label><input id="roomName_' + r.id + '" type="text" value="' + esc(r.name) + '"></div>' +
@@ -1827,13 +1829,14 @@
     const sync = (window.CJXSync && window.CJXSync.isAuthed()) ? window.CJXSync.getConfig() : null;
     const s = S.settings;
     return {
-      v: 2, t: 'invite',
+      v: 3, t: 'invite',
       shop: {
         name: s.shopName, cuisine: s.cuisine, hours: s.businessHours, phone: s.phone,
         address: s.address || '', slogan: s.slogan || '', adText: s.adText || '',
-        nav: D.navUrlOf(s)
+        nav: D.navUrlOf(s),
+        manager: { name: s.managerName || '', phone: s.managerPhone || s.phone || '', title: s.managerTitle || '包厢服务经理' }
       },
-      classic: D.classicDishes(S, 3),
+      classic: D.classicDishes(S, 6),
       order: {
         id: o.id, code: o.code, date: o.date, time: o.time, room: roomName(o.roomId),
         host: o.customerName, partySize: o.partySize, occasion: o.occasion,
@@ -1893,8 +1896,54 @@
     if (lines.length > (maxLines || 2)) { lines.length = maxLines || 2; lines[maxLines - 1] = lines[maxLines - 1].slice(0, -1) + '…'; }
     return lines;
   }
+  /* 门店照片：把真实照片放进 photos/ 目录同名替换即生效；
+     文件不存在时用渐变占位块，不影响生成 */
+  function loadImg(src, timeout) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      let done = false;
+      const fin = (im) => { if (done) return; done = true; resolve(im); };
+      img.onload = () => fin(img);
+      img.onerror = () => fin(null);
+      img.src = src;
+      setTimeout(() => fin(null), timeout || 2200);
+    });
+  }
+  function photoSrc(kind, key) {
+    const q = kind === 'env' ? ('env-' + key) : (kind === 'manager' ? 'manager' : ('dish-' + key));
+    return 'photos/' + encodeURIComponent(q) + '.jpg';
+  }
+  function drawCover(ctx, img, x, y, w, h) {
+    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+    if (!iw || !ih) return;
+    const s = Math.max(w / iw, h / ih);
+    const dw = iw * s, dh = ih * s;
+    ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  }
+  function drawPhotoBox(ctx, img, x, y, w, h, r, label, caption) {
+    ctx.save();
+    roundRect(ctx, x, y, w, h, r); ctx.clip();
+    if (img) { drawCover(ctx, img, x, y, w, h); }
+    else {
+      const g = ctx.createLinearGradient(x, y, x + w, y + h);
+      g.addColorStop(0, '#2c5345'); g.addColorStop(1, '#162d27');
+      ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(231,214,174,.30)';
+      ctx.font = '600 ' + Math.round(Math.min(w, h) * 0.34) + 'px "Songti SC","STSong","SimSun",serif';
+      ctx.fillText(String(label || '鲜').slice(0, 1), x + w / 2, y + h / 2 - (caption ? 6 : 0));
+      if (caption) {
+        ctx.fillStyle = 'rgba(231,214,174,.55)'; ctx.font = '16px sans-serif';
+        ctx.fillText(caption, x + w / 2, y + h - 18);
+      }
+      ctx.textBaseline = 'alphabetic';
+    }
+    ctx.restore();
+    roundRect(ctx, x, y, w, h, r);
+    ctx.strokeStyle = 'rgba(217,189,133,.5)'; ctx.lineWidth = 1.5; ctx.stroke();
+  }
   async function buildInvitePoster(o) {
-    const W = 1080, H = 1920;
+    const W = 1080, H = 2860;
     const c = document.createElement('canvas'); c.width = W; c.height = H;
     const ctx = c.getContext('2d');
     const shop = S.settings;
@@ -1948,67 +1997,115 @@
       ctx.fillText('共 ' + dishes.length + ' 道菜', W / 2, 1062);
     }
 
-    const classic = D.classicDishes(S, 3);
-    let signY = 1100;
+    // 菜品展示（图片网格 3×2，照片放 photos/dish-菜名.jpg）
+    const classic = D.classicDishes(S, 6);
+    let y = 1090;
     if (classic.length) {
+      const imgs = await Promise.all(classic.map((d) => loadImg(photoSrc('dish', d.name))));
       ctx.textAlign = 'center'; ctx.fillStyle = '#b8893f'; ctx.font = '24px sans-serif';
-      ctx.fillText('经 典 菜 品', W / 2, 1096);
-      const cw = 280, gap = 20, totalW = classic.length * cw + (classic.length - 1) * gap;
+      ctx.fillText('菜 品 展 示', W / 2, y + 4);
+      const gap = 16, cw = (W - 220 - gap * 2) / 3, ch = 150;
+      const gridY = y + 26, rowH = ch + 66;
       classic.forEach((d, i) => {
-        const x = (W - totalW) / 2 + i * (cw + gap);
-        roundRect(ctx, x, 1120, cw, 126, 14);
+        const col = i % 3, row = Math.floor(i / 3);
+        const x = 110 + col * (cw + gap), yy = gridY + row * (rowH + gap);
+        roundRect(ctx, x, yy, cw, rowH, 16);
         ctx.fillStyle = '#f4eee3'; ctx.fill();
         ctx.strokeStyle = '#e7ddca'; ctx.lineWidth = 1; ctx.stroke();
+        drawPhotoBox(ctx, imgs[i], x + 8, yy + 8, cw - 16, ch - 16, 10, d.name, '招牌菜品');
         ctx.textAlign = 'center';
-        ctx.fillStyle = '#1f3a32'; ctx.font = '600 28px "Songti SC","STSong","SimSun",serif';
-        ctx.fillText(truncate(d.name, 8), x + cw / 2, 1168);
-        ctx.fillStyle = '#8a8070'; ctx.font = '19px sans-serif';
-        ctx.fillText(truncate(d.note || '招牌必点', 12), x + cw / 2, 1204);
+        ctx.fillStyle = '#1f3a32'; ctx.font = '600 25px "Songti SC","STSong","SimSun",serif';
+        ctx.fillText(truncate(d.name, 8), x + cw / 2, yy + ch + 32);
+        ctx.fillStyle = '#a9721c'; ctx.font = '19px sans-serif';
+        ctx.fillText(d.price ? ('¥' + d.price + ' / 份') : truncate(d.note || '招牌必点', 10), x + cw / 2, yy + ch + 60);
       });
-      signY = 1290;
+      y = gridY + Math.ceil(classic.length / 3) * (rowH + gap) + 6;
+    } else {
+      y = 1100;
     }
 
+    // 环境展示（3 图横排，照片放 photos/env-1.jpg … env-3.jpg）
+    ctx.textAlign = 'center'; ctx.fillStyle = '#b8893f'; ctx.font = '24px sans-serif';
+    ctx.fillText('环 境 展 示', W / 2, y + 34);
+    const envY = y + 56, egap = 16, ew = (W - 220 - egap * 2) / 3, eh = 190;
+    const envImgs = await Promise.all([1, 2, 3].map((i) => loadImg(photoSrc('env', i))));
+    const envLabels = ['大厅环境', 'VIP 包厢', '茶歇卡座'];
+    envImgs.forEach((img, i) => {
+      const x = 110 + i * (ew + egap);
+      drawPhotoBox(ctx, img, x, envY, ew, eh, 14, '鲜', '');
+      ctx.textAlign = 'center'; ctx.fillStyle = '#6d6352'; ctx.font = '19px sans-serif';
+      ctx.fillText(envLabels[i], x + ew / 2, envY + eh + 30);
+    });
+    y = envY + eh + 64;
+
+    // 专属服务经理
+    const mgrName = shop.managerName || '';
+    const mgrPhone = shop.managerPhone || shop.phone || '';
+    roundRect(ctx, 110, y, W - 220, 148, 18);
+    ctx.fillStyle = '#fffdf9'; ctx.fill();
+    ctx.strokeStyle = '#d9bd85'; ctx.lineWidth = 1.5; ctx.stroke();
+    const mgrImg = await loadImg(photoSrc('manager'));
+    drawPhotoBox(ctx, mgrImg, 138, y + 24, 100, 100, 50, (mgrName || shop.shopName || '鲜').slice(0, 1), '');
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#8a8070'; ctx.font = '18px sans-serif';
+    ctx.fillText('YOUR PRIVATE MANAGER', 262, y + 40);
+    ctx.fillStyle = '#1f3a32'; ctx.font = '600 34px "Songti SC","STSong","SimSun",serif';
+    ctx.fillText((mgrName ? mgrName : (shop.shopName || '长季鲜')) + ' · ' + (shop.managerTitle || '包厢服务经理'), 262, y + 84);
+    ctx.fillStyle = '#a9721c'; ctx.font = '22px sans-serif';
+    ctx.fillText(mgrPhone ? ('订座 / 服务专线：' + mgrPhone) : '全程一对一服务，预订事宜随叫随到', 262, y + 122);
+    if (mgrPhone) {
+      roundRect(ctx, W - 110 - 148, y + 48, 148, 52, 26);
+      ctx.fillStyle = '#1f3a32'; ctx.fill();
+      ctx.textAlign = 'center'; ctx.fillStyle = '#f7f3ea'; ctx.font = '21px sans-serif';
+      ctx.fillText('电话联系', W - 110 - 74, y + 81);
+    }
+    y += 172;
+
     // 店招广告位
-    roundRect(ctx, 90, signY, W - 180, 168, 18);
+    roundRect(ctx, 110, y, W - 220, 150, 18);
     ctx.fillStyle = '#1b332c'; ctx.fill();
     ctx.strokeStyle = '#c9a45c'; ctx.lineWidth = 2.5; ctx.stroke();
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#e7d6ae'; ctx.font = '700 46px "Songti SC","STSong","SimSun",serif';
-    ctx.fillText(shop.shopName || '长季鲜', W / 2, signY + 66);
+    ctx.fillStyle = '#e7d6ae'; ctx.font = '700 44px "Songti SC","STSong","SimSun",serif';
+    ctx.fillText(shop.shopName || '长季鲜', W / 2, y + 58);
     ctx.fillStyle = 'rgba(231,214,174,.85)'; ctx.font = '23px sans-serif';
-    ctx.fillText((shop.slogan || '时令海鲜 · 私厨家宴') + (shop.adText ? '　|　' + truncate(shop.adText, 18) : ''), W / 2, signY + 106);
-    ctx.fillStyle = 'rgba(231,214,174,.58)'; ctx.font = '19px sans-serif';
-    ctx.fillText('店招广告位 · 可替换为门店实景 / 合作广告', W / 2, signY + 142);
+    ctx.fillText((shop.slogan || '时令海鲜 · 私厨家宴') + (shop.adText ? '　|　' + truncate(shop.adText, 18) : ''), W / 2, y + 96);
+    ctx.fillStyle = 'rgba(231,214,174,.58)'; ctx.font = '18px sans-serif';
+    ctx.fillText('店招广告位 · 可替换为门店实景 / 合作广告', W / 2, y + 128);
+    y += 174;
 
-    // 地址 + 导航
-    const nav = D.navUrlOf(shop);
-    let addrY = signY + 214;
-    ctx.fillStyle = '#4f4a40'; ctx.font = '25px sans-serif';
-    const addr = '地址：' + (shop.address || shop.shopName || '');
-    wrapLines(ctx, addr, W - 220, 2).forEach((line, i) => { ctx.fillText(line, W / 2, addrY + i * 34); });
-    if (!shop.address) {
-      ctx.fillStyle = '#a9721c'; ctx.font = '21px sans-serif';
-      ctx.fillText('（设置里填门店地址后，这里会自动显示并可一键导航）', W / 2, addrY + 34);
-      addrY += 34;
-    }
+    // 地址 + 导航按钮（不再放导航二维码，改成地址卡 + 导航按钮引导）
+    roundRect(ctx, 110, y, W - 220, 178, 18);
+    ctx.fillStyle = '#fffdf9'; ctx.fill();
+    ctx.strokeStyle = '#e7ddca'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#4f4a40'; ctx.font = '24px sans-serif';
+    const addr = shop.address || '';
+    const addrLines = wrapLines(ctx, (addr ? '地址：' + addr : '地址：' + (shop.shopName || '')), W - 260, 2);
+    addrLines.forEach((line, i) => { ctx.fillText(line, W / 2, y + 46 + i * 32); });
+    const navBtnY = y + (addrLines.length > 1 ? 96 : 78);
+    roundRect(ctx, W / 2 - 180, navBtnY, 360, 58, 29);
+    ctx.fillStyle = '#1f3a32'; ctx.fill();
+    ctx.fillStyle = '#f2e6c9'; ctx.font = '600 25px sans-serif';
+    ctx.fillText('一键导航 · 高德地图到店', W / 2, navBtnY + 38);
+    ctx.fillStyle = '#8a8070'; ctx.font = '17px sans-serif';
+    ctx.fillText('打开链接版邀请函可直接点导航；或在高德地图搜「' + truncate(shop.shopName || '长季鲜', 8) + '」', W / 2, y + 168);
+    y += 202;
 
-    const qrY = addrY + 36, qrSize = 200;
+    // 回执二维码（单码居中）
+    const qrSize = 210;
     const qr = await makeQrCanvas(pageLink('invite.html', { d: b64e(JSON.stringify(invitePayload(o))) }), qrSize);
-    const navQr = nav ? await makeQrCanvas(nav, qrSize) : null;
-    const boxes = [];
-    if (qr) boxes.push({ qr, label: '扫码回执 · 人数与忌口' });
-    if (navQr) boxes.push({ qr: navQr, label: '扫码导航 · 高德地图' });
-    boxes.forEach((b, i) => {
-      const cx = boxes.length === 1 ? W / 2 : (W / 2 + (i === 0 ? -165 : 165));
-      roundRect(ctx, cx - 120, qrY - 12, 240, 240, 16);
+    if (qr) {
+      roundRect(ctx, W / 2 - 125, y - 12, 250, 250, 16);
       ctx.fillStyle = '#fffdf9'; ctx.fill(); ctx.strokeStyle = '#d9bd85'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.drawImage(b.qr, cx - 100, qrY + 8, qrSize, qrSize);
-      ctx.textAlign = 'center'; ctx.fillStyle = '#6d6352'; ctx.font = '19px sans-serif';
-      ctx.fillText(b.label, cx, qrY + 262);
-    });
-    if (!boxes.length) {
+      ctx.drawImage(qr, W / 2 - qrSize / 2, y + 8, qrSize, qrSize);
+      ctx.textAlign = 'center'; ctx.fillStyle = '#6d6352'; ctx.font = '20px sans-serif';
+      ctx.fillText('扫码回执 · 填到场人数与忌口', W / 2, y + 264);
+      y += 296;
+    } else {
       ctx.textAlign = 'center'; ctx.fillStyle = '#8a8070'; ctx.font = '22px sans-serif';
-      ctx.fillText('在线回执请让主人家发链接', W / 2, qrY + 110);
+      ctx.fillText('在线回执请让主人家发链接', W / 2, y + 100);
+      y += 130;
     }
     ctx.textAlign = 'center';
     ctx.fillStyle = '#8a8070'; ctx.font = '20px sans-serif';
@@ -2564,6 +2661,8 @@
         S.settings.phone = (($('#setPhone') || {}).value || '').trim();
         S.settings.slogan = (($('#setSlogan') || {}).value || '').trim();
         S.settings.adText = (($('#setAdText') || {}).value || '').trim();
+        S.settings.managerName = (($('#setManagerName') || {}).value || '').trim();
+        S.settings.managerPhone = (($('#setManagerPhone') || {}).value || '').trim();
         S.settings.lat = (($('#setLat') || {}).value || '').trim();
         S.settings.lng = (($('#setLng') || {}).value || '').trim();
         touchSettings(); S.meta.rev++; saveState({ snap: true }); render({ scroll: false }); toast('门店信息已保存');

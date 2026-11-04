@@ -2,7 +2,7 @@
 (function (global) {
   'use strict';
 
-  const APP_VERSION = '1.3.1';
+  const APP_VERSION = '1.3.2';
   const CATEGORIES = ['冷菜', '热菜', '汤', '主食', '甜品'];
 
   const DIET_OPTIONS = ['无忌口', '海鲜过敏', '不吃海鲜', '素食', '不吃辣', '不吃牛羊肉', '不吃猪肉', '不吃蛋', '坚果过敏', '不吃香菜', '少油少盐', '控糖'];
@@ -155,12 +155,15 @@
       subtitle: '私厨会所',
       cuisine: '福安菜 × 厦门海鲜',
       businessHours: '17:00–22:00',
-      address: '',
+      address: '厦门市湖里区天地建材城综合楼东侧二楼',
       phone: '',
       slogan: '时令海鲜 · 私厨家宴',
       adText: '',
       lat: '',
       lng: '',
+      managerName: '',
+      managerPhone: '',
+      managerTitle: '包厢服务经理',
       pins: { boss: '', manager: '', kitchen: '', service: '' },
       backupReminderDays: 7,
       aiPrompt: '你是长季鲜私厨会所（福安菜 × 厦门海鲜融合）的预定助手。店里不卖福安炖罐，也没有一堆福安小吃，小吃只保留「穆阳花饺」一道。请从下面的微信聊天记录中提取预定信息，只输出 JSON，不要解释。字段：date（YYYY-MM-DD，相对日期按今天换算）、time（HH:MM）、partySize（数字）、customerName、phone、wechat、roomName、budget（餐标金额，数字）、budgetMode（table 每桌 / person 每位）、occasion、dietary（数组）、special、dishes（数组）、notes。缺失的字段留空字符串或空数组。',
@@ -653,7 +656,7 @@
       .filter((d) => d && !d.deleted && d.classic && d.status !== 'off')
       .sort((a, b) => (Number(b.price) || 0) - (Number(a.price) || 0))
       .slice(0, limit || 4)
-      .map((d) => ({ name: d.name, note: d.note || '' }));
+      .map((d) => ({ name: d.name, note: d.note || '', price: Number(d.price) || 0 }));
   }
   // 高德地图导航：有经纬度用标点，否则用店名 + 地址搜索
   function navUrlOf(settings) {

@@ -13,12 +13,15 @@
     S.settings = D.defaultSettings();
     S.settings.shopName = '长季鲜';
     S.settings.subtitle = '私厨会所';
-    S.settings.address = '福安市城南街道富春大道 88 号 3 楼';
+    S.settings.address = '厦门市湖里区天地建材城综合楼东侧二楼';
     S.settings.phone = '0593-6688999';
     S.settings.slogan = '时令海鲜 · 私厨家宴';
     S.settings.adText = '本月主打：下白石鲟 · 承接寿宴';
-    S.settings.lat = '27.0900';
-    S.settings.lng = '119.6500';
+    S.settings.lat = '';
+    S.settings.lng = '';
+    S.settings.managerName = '陈经理';
+    S.settings.managerPhone = '13805926688';
+    S.settings.managerTitle = '包厢服务经理';
 
     const customers = [
       { id: 'c1', name: '王建国', aliases: ['王总'], wechat: 'wangjg', phone: '13805920001', tags: ['老友', 'VIP'], dietary: [], tasteTags: ['鲜', '时令', '清蒸', '清淡'], tasteScores: { '鲜': 5, '时令': 4, '清蒸': 2, '清淡': 2 }, dishCounts: { '生腌虾菇': 2, '原汁目鱼': 2, '蒸大口鱼': 1, '美人鱼炒姜': 1 }, prefRoom: 'r1', notes: '熟客，喜欢福安海鲜和时令鱼；太太不吃香菜。', visitCount: 3, lastVisit: D.addDays(t, -1), budgetPref: 3880, budgetMode: 'table' },

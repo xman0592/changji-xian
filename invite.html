@@ -71,9 +71,30 @@
   .classic .it span { display:block; font-size:9.5px; color:var(--muted); margin-top:3px; line-height:1.4; }
   .locate { background:#fffdf9; border:1px solid var(--line); border-radius:14px; padding:13px 14px; margin-top:16px; }
   .locate .addr { font-size:12.5px; color:#4f4a40; line-height:1.65; }
-  .locate a.nav { display:flex; align-items:center; justify-content:center; gap:6px; margin-top:10px; min-height:44px; border-radius:11px; background:var(--ink); color:var(--cream); text-decoration:none; font-size:14px; font-weight:500; }
-  .locate a.nav:active { background:var(--ink2); }
+  .locate a.nav { display:flex; align-items:center; justify-content:center; gap:6px; margin-top:10px; min-height:46px; border-radius:12px; background:linear-gradient(135deg,#c39a4f,#b8893f); color:#fff; text-decoration:none; font-size:14.5px; font-weight:600; box-shadow:0 6px 16px rgba(184,137,63,.28); }
+  .locate a.nav:active { filter:brightness(.95); }
   .locate .hint2 { font-size:10.5px; color:var(--muted); margin-top:7px; text-align:center; }
+  .dish-gallery { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px; }
+  .dish-gallery .card { background:#f4eee3; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .dish-gallery .pic { position:relative; height:112px; background:linear-gradient(145deg,#2c5345,#162d27); display:flex; align-items:center; justify-content:center; }
+  .dish-gallery .pic::after { content:"鲜"; font-family:"Songti SC","STSong","SimSun",serif; font-size:36px; color:rgba(231,214,174,.28); }
+  .dish-gallery .pic img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .dish-gallery .cap { padding:7px 10px 9px; }
+  .dish-gallery .cap b { font-family:"Songti SC","STSong","SimSun",serif; font-size:13.5px; color:var(--ink); display:block; line-height:1.3; }
+  .dish-gallery .cap span { font-size:11px; color:var(--amber); display:block; margin-top:2px; }
+  .env { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:8px; }
+  .env .pic { position:relative; height:96px; border-radius:10px; overflow:hidden; background:linear-gradient(145deg,#2c5345,#162d27); display:flex; align-items:center; justify-content:center; }
+  .env .pic::before { content:"鲜"; font-family:"Songti SC","STSong","SimSun",serif; font-size:26px; color:rgba(231,214,174,.25); }
+  .env .pic img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .env .pic span { position:absolute; left:0; right:0; bottom:5px; text-align:center; font-size:9.5px; color:rgba(231,214,174,.75); letter-spacing:1px; }
+  .manager { display:flex; align-items:center; gap:12px; background:#fffdf9; border:1px solid var(--line); border-radius:14px; padding:12px 13px; margin-top:16px; }
+  .manager .avatar { width:54px; height:54px; border-radius:50%; background:linear-gradient(145deg,#2c5345,#162d27); color:#e7d6ae; font-family:"Songti SC","STSong","SimSun",serif; font-size:23px; display:flex; align-items:center; justify-content:center; flex:none; position:relative; overflow:hidden; border:1.5px solid rgba(217,189,133,.55); }
+  .manager .avatar img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .manager .info { flex:1; min-width:0; }
+  .manager .info i { display:block; font-style:normal; font-size:9.5px; letter-spacing:2px; color:var(--gold); }
+  .manager .info b { font-family:"Songti SC","STSong","SimSun",serif; font-size:15.5px; color:var(--ink); }
+  .manager .info span { display:block; font-size:11px; color:var(--muted); margin-top:2px; }
+  .manager a.call { flex:none; display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:0 14px; border-radius:19px; background:var(--ink); color:var(--cream); text-decoration:none; font-size:13px; }
   .foot { text-align:center; color:rgba(247,243,234,.55); font-size:11.5px; line-height:1.8; margin-top:20px; }
   .foot b { color:var(--gold2); font-weight:500; }
   .empty { background:var(--paper); border-radius:18px; padding:40px 22px; text-align:center; color:var(--muted); margin-top:18px; }
@@ -103,9 +124,11 @@
 
   function render(){
     if(!P||!P.order){ $('#app').innerHTML='<div class="empty">邀请函链接无效或已过期。<br>请让主人家重新发一份。</div>'; return; }
-    const shop=P.shop||{}; const o=P.order||{};
+    const shop=P.shop||{}; const o=P.order||{}; const mgr=shop.manager||{};
     const dishes=(o.dishes||[]).slice(0,10);
     const classic=(P.classic||[]).filter(x=>x&&x.name);
+    const dishPic=(name)=>'photos/dish-'+encodeURIComponent(name)+'.jpg';
+    const imgTag=(src)=>'<img src="'+esc(src)+'" alt="" loading="lazy" onerror="this.remove()">';
     const head='<div class="invite"><div class="invite-head"><div class="kicker">INVITATION</div><h1>诚 邀 赴 宴</h1><p>'+esc(shop.cuisine||'福安菜 × 厦门海鲜')+(shop.name?' · '+esc(shop.name):'')+'</p></div>'+
       '<div class="signboard"><b>'+esc(shop.name||'长季鲜')+'</b><span>'+esc(shop.slogan||'时令海鲜 · 私厨家宴')+(shop.adText?' · '+esc(shop.adText):'')+'</span><i>店 招 广 告 位</i></div>'+
       '<div class="invite-body"><div class="greet">'+esc(o.host||'贵客')+' 及同席亲友，见字如面：</div>'+
@@ -113,7 +136,9 @@
       '<div class="facts"><div class="fact"><span>宴请场合</span><b>'+esc(o.occasion||'私厨晚宴')+'</b></div><div class="fact"><span>包厢</span><b>'+esc(o.room||'待定')+'</b></div>'+
       '<div class="fact"><span>到场时间</span><b>'+esc(o.time||'')+'</b></div><div class="fact"><span>人数</span><b>'+(o.partySize||'')+' 位</b></div></div>'+
       (dishes.length?'<div class="divider"></div><div class="greet" style="font-size:13px;color:var(--muted);margin-bottom:8px">当日菜单 · 以到店为准</div><div class="dishes">'+dishes.map(d=>'<span class="dish">'+esc(d)+'</span>').join('')+'</div>':'')+
-      (classic.length?'<div class="sec-title">经 典 菜 品</div><div class="classic">'+classic.slice(0,3).map(x=>'<div class="it"><b>'+esc(x.name)+'</b><span>'+esc(x.note||'招牌必点')+'</span></div>').join('')+'</div>':'')+
+      (classic.length?'<div class="sec-title">菜 品 展 示</div><div class="dish-gallery">'+classic.slice(0,6).map(x=>'<div class="card"><div class="pic">'+imgTag(dishPic(x.name))+'</div><div class="cap"><b>'+esc(x.name)+'</b><span>'+(x.price?('¥'+x.price+' / 份'):esc(x.note||'招牌必点'))+'</span></div></div>').join('')+'</div>':'')+
+      '<div class="sec-title">环 境 展 示</div><div class="env">'+[['大厅环境',1],['VIP 包厢',2],['茶歇卡座',3]].map(t=>'<div class="pic">'+imgTag('photos/env-'+t[1]+'.jpg')+'<span>'+t[0]+'</span></div>').join('')+'</div>'+
+      ((mgr.name||mgr.phone)?'<div class="manager"><div class="avatar">'+imgTag('photos/manager.jpg')+esc((mgr.name||shop.name||'鲜').slice(0,1))+'</div><div class="info"><i>专属服务经理</i><b>'+esc(mgr.name||shop.name||'长季鲜')+'</b><span>'+esc(mgr.title||'包厢服务经理')+(mgr.phone?(' · 订座 '+esc(mgr.phone)):' · 全程一对一服务')+'</span></div>'+(mgr.phone?'<a class="call" href="tel:'+esc(mgr.phone)+'">电话联系</a>':'')+'</div>':'')+
       (o.special?'<div class="note">'+esc(o.special)+'</div>':'')+
       ((shop.address||shop.nav)?'<div class="locate"><div class="addr">'+esc(shop.address||'')+'</div>'+
         (shop.nav?'<a class="nav" href="'+esc(shop.nav)+'" target="_blank" rel="noopener">一键导航到 '+esc(shop.name||'长季鲜')+'</a>':'')+
