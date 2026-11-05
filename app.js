@@ -50,7 +50,7 @@
     { key: 'manager', label: '转店长', desc: '店长按人数餐标配菜' },
     { key: 'menu', label: '出菜单', desc: 'AI 生成本桌菜单' },
     { key: 'boss', label: '转老板', desc: '老板核对后发客户' },
-    { key: 'customer', label: '发客户', desc: '客户确认是否改菜' },
+    { key: 'customer', label: '发客户', desc: '客户点确认页链接，回复确认码收尾' },
     { key: 'confirmed', label: '已确认', desc: '可发邀请函' }
   ];
 
@@ -710,14 +710,14 @@
     const pending = alive(S.orders).filter((o) => o.status === 'pending').sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     const tomorrow = alive(S.orders).filter((o) => o.date === D.addDays(t, 1) && o.status !== 'cancelled').sort((a, b) => a.time.localeCompare(b.time));
     const vipOrders = todayOrders.filter((o) => { const c = orderCustomer(o); return c && (c.tags || []).some((x) => /VIP|老友/i.test(x)); });
-    // 流程待办：老板 → 店长配菜；店长 → 出菜单；老板 → 发客户
+    // 流程待办：老板 → 店长配菜；店长 → 出菜单；老板 → 发客户 / 收确认
     const todo = alive(S.orders).filter((o) => ['pending', 'confirmed', 'notified'].includes(o.status)).filter((o) => {
       const st = orderFlow(o);
       if (session.role === 'manager') return st === 'manager';
-      if (session.role === 'boss') return st === 'boss';
+      if (session.role === 'boss') return st === 'boss' || st === 'customer';
       return false;
     }).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-    const todoLabel = session.role === 'manager' ? '待我配菜' : '待我发客户';
+    const todoLabel = session.role === 'manager' ? '待我配菜' : '待我发客户 / 收确认';
     return '<div class="hero"><div class="hero-date">' + D.fmtDateCN(t) + ' · ' + D.weekdayCN(t) + ' · ' + esc(S.settings.cuisine || '') + '</div>' +
       '<h2>' + nowGreeting() + '，' + esc(roleName()) + '</h2><p>' + (todayOrders.length ? '今天有 ' + todayOrders.length + ' 桌客人，忙而不乱。' : '今天还没有预定，先把客人接住。') + '</p>' +
       '<div class="hero-stats">' +
@@ -1281,7 +1281,7 @@
       if (stage === 'manager') actions.push('<button class="btn gold block" data-act="ai-menu">' + I.spark + ' AI 自动配菜 + 排包厢</button>');
       if (stage === 'menu') actions.push('<button class="btn primary" data-act="flow-boss">' + I.share + ' 发给老板确认</button><button class="btn soft" data-act="ai-menu">重新配菜</button>');
       if (stage === 'boss') actions.push('<button class="btn primary" data-act="flow-customer">' + I.share + ' 转发给客户确认</button>');
-      if (stage === 'customer') actions.push('<button class="btn primary" data-act="flow-confirm">' + I.check + ' 客户已确认菜品</button><button class="btn soft" data-act="flow-customer">再发一次</button>');
+      if (stage === 'customer') actions.push('<button class="btn primary" data-act="flow-confirm">' + I.check + ' 客户已确认菜品</button><button class="btn gold" data-act="import-menu-confirm">' + I.check + ' 录入客户确认码</button><button class="btn soft" data-act="flow-customer">再发一次</button>');
       if (stage === 'confirmed' && o.status !== 'cancelled') actions.push('<button class="btn gold block" data-act="open-invite">' + I.share + ' 生成/发送邀请函</button>');
       else if (o.status !== 'cancelled') actions.push('<button class="btn soft" data-act="open-invite">' + I.share + ' 邀请函（客户未确认菜单）</button>');
       if (o.status === 'pending') actions.push('<button class="btn primary" data-act="confirm-order">审核通过并通知</button>');
@@ -1460,6 +1460,66 @@
       '<div class="share-text">' + esc(text) + '</div>' +
       '<div class="btn-row mt8"><button class="btn primary" data-act="copy-forward" data-id="' + o.id + '" data-stage="' + stage + '" data-text="' + esc(text) + '">复制并标记已发送</button><button class="btn ghost" data-act="close-sheet">取消</button></div>' +
       '<div class="hint">复制后粘贴到微信发给对方。标记后流程会前进一步，对方处理完再往下走。</div>');
+  }
+
+  /* ---------- 客户菜单确认环节 ---------- */
+  // 确认码由订单 id 确定性生成：客户确认页显示同一串码，回贴回来即可校验，不需要后端
+  function ccOf(id) {
+    const s = String(id || '');
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return 'C' + ('0000' + h.toString(36).toUpperCase()).slice(-4);
+  }
+  function confirmPayload(o) {
+    return {
+      v: 1, t: 'confirm', cc: ccOf(o.id),
+      s: { n: S.settings.shopName, c: S.settings.cuisine, p: S.settings.phone, a: S.settings.address },
+      o: {
+        id: o.id, code: o.code, d: o.date, t: o.time, r: roomName(o.roomId), h: o.customerName || '贵客',
+        ps: o.partySize, oc: o.occasion || '', b: Number(o.budget) || 0, bm: o.budgetMode || 'table',
+        di: (o.dietary || []).filter((x) => x && x !== '无忌口'), sp: o.special || ''
+      },
+      m: (o.dishes || []).map((d) => ({ n: (d.name || d), p: Number(d.price) || 0, s: (d.status && d.status !== 'on') ? d.status : '', l: Number(d.leadDays) || 0 }))
+    };
+  }
+  function openCustomerConfirmSheet(o) {
+    const link = pageLink('confirm.html', { d: b64e(JSON.stringify(confirmPayload(o))) });
+    // 供测试与调试取链接
+    window.__confirmLink = link;
+    const text = menuTextForCustomer(o) + '\n菜单确认链接（点开看完菜，点一下「确认」就行）：\n' + link;
+    const host = location.hostname || '';
+    const badHost = location.protocol === 'file:' || host === 'localhost' || host === '127.0.0.1';
+    openSheet('<h3>菜单发给客户确认</h3><p class="sheet-sub">客户在微信里点开确认页：看完菜单点「确认」或写调整意见，把回复发回来，您录入后流程自动收尾。</p>' +
+      (badHost ? '<div class="alert-line" style="margin-bottom:10px">' + I.alert + '<div><b>当前是本地地址，客户手机打不开链接。</b>正式部署后再发送，或改用「只复制文字」。</div></div>' : '') +
+      '<div class="share-text">' + esc(text) + '</div>' +
+      '<div class="btn-row mt8"><button class="btn primary" data-act="copy-forward" data-id="' + o.id + '" data-stage="customer" data-text="' + esc(text) + '">' + I.share + ' 复制并标记已发送</button><button class="btn soft" data-act="copy-confirm-text" data-id="' + o.id + '">只复制文字（不带链接）</button></div>' +
+      '<button class="btn gold block mt8" data-act="import-menu-confirm" data-id="' + o.id + '">' + I.check + ' 客户回复了？录入确认收尾</button>' +
+      '<button class="btn ghost block mt8" data-act="close-sheet">关闭</button>' +
+      '<div class="hint">客户点「确认」后会得到一句带确认码的回复；把那句话粘到「录入确认」里即可自动完成。客户直接回「可以 / 没问题」也认。</div>');
+  }
+  function openConfirmImportSheet(id) {
+    openSheet('<h3>录入客户确认</h3><p class="sheet-sub">把客户发回的回复整段粘进来（含确认码的那句），系统自动识别。</p>' +
+      '<div class="field"><textarea id="mcReply" placeholder="菜单已确认 · CXxxxx（确认码 Cxxxx）"></textarea></div>' +
+      '<div class="btn-row"><button class="btn ghost" data-act="close-sheet">取消</button><button class="btn primary" data-act="save-menu-confirm" data-id="' + id + '">识别并完成确认</button></div>' +
+      '<div class="hint">带确认码、或「订单号 + 确认 / 可以 / 没问题」都会识别为确认；「想调整」的回复不会误确认。</div>');
+  }
+  function saveMenuConfirm(id) {
+    const o = alive(S.orders).find((x) => x.id === id);
+    if (!o) return;
+    const raw = (($('#mcReply') || {}).value || '').trim();
+    if (!raw) { toast('请先粘贴客户的回复'); return; }
+    const up = raw.toUpperCase();
+    if (/想调整|想换一道|想加一道|忌口要补充/.test(raw)) { toast('客户想调整菜单：请先按反馈改菜，再重新发送确认'); return; }
+    const cc = ccOf(o.id);
+    const okByCode = up.includes(cc);
+    const okByWords = String(o.code || '') && up.includes(String(o.code).toUpperCase()) && /确认|可以|没问题|OK/.test(up);
+    if (!okByCode && !okByWords) { toast('没识别到确认信息：需要确认码 ' + cc + '，或订单号 + 确认字样'); return; }
+    o.menuConfirmed = true;
+    o.menuConfirmedAt = D.nowISO();
+    setFlow(o, 'confirmed', okByCode ? '客户确认码 ' + cc : '客户回复确认');
+    S.meta.rev++;
+    saveState({ snap: true }); closeSheet(); render({ scroll: false });
+    toast('客户已确认，可以发邀请函了');
   }
 
   /* ---------- 日历 ---------- */
@@ -2593,9 +2653,17 @@
       case 'flow-customer': {
         const o = alive(S.orders).find((x) => x.id === ui.params.orderId); if (!o) break;
         if (!(o.dishes || []).length) { toast('还没有菜单，先 AI 配菜'); break; }
-        openForwardSheet(o, 'customer', '菜单发给客户确认', '客户看完回复「可以」或提出改菜，再点「客户已确认」。', menuTextForCustomer(o));
+        openCustomerConfirmSheet(o);
         break;
       }
+      case 'copy-confirm-text': {
+        const o = alive(S.orders).find((x) => x.id === el.dataset.id); if (!o) break;
+        copyText(menuTextForCustomer(o));
+        toast('纯文字菜单已复制（不含确认链接）');
+        break;
+      }
+      case 'import-menu-confirm': openConfirmImportSheet(el.dataset.id || ui.params.orderId); break;
+      case 'save-menu-confirm': saveMenuConfirm(el.dataset.id); break;
       case 'copy-forward': {
         const o = alive(S.orders).find((x) => x.id === el.dataset.id); if (!o) break;
         copyText(el.dataset.text || '');

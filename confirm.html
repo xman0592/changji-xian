@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14261f">
+<meta name="description" content="长季鲜私房菜单席确认：查看为您安排的菜单，一键确认或提出调整。">
+<meta property="og:title" content="长季鲜 · 菜单确认">
+<meta property="og:description" content="为您安排的菜单，请过目确认。">
+<meta property="og:type" content="website">
+<title>长季鲜 · 菜单确认</title>
+<style>
+  :root { --ink:#1f3a32; --ink2:#2e5a4b; --gold:#b8893f; --gold2:#d9bd85; --cream:#f7f3ea; --paper:#fbf8f1; --line:#e7ddca; --muted:#8a8070; --red:#a63f36; --amber:#a9721c; --green:#2e6e4e; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif; background:linear-gradient(175deg,#14261f,#0f1f1a 75%); color:#2b2a26; font-size:15px; line-height:1.6; min-height:100vh; }
+  .page { max-width:560px; margin:0 auto; padding:30px 16px 54px; }
+  .brand { text-align:center; color:var(--cream); font-family:"Songti SC","STSong","SimSun",serif; font-size:28px; letter-spacing:8px; font-weight:600; }
+  .brand small { display:block; font-size:10px; letter-spacing:4px; color:rgba(231,214,174,.62); margin-top:6px; font-family:inherit; }
+  .ornament { display:flex; align-items:center; gap:10px; margin:16px auto 0; width:64%; color:var(--gold2); }
+  .ornament::before,.ornament::after { content:""; flex:1; height:1px; background:linear-gradient(90deg,transparent,rgba(217,189,133,.6)); }
+  .ornament::after { background:linear-gradient(90deg,rgba(217,189,133,.6),transparent); }
+  .ornament i { width:7px; height:7px; border:1px solid var(--gold2); transform:rotate(45deg); font-style:normal; flex:none; }
+  .card-main { margin-top:20px; background:linear-gradient(170deg,#16302a,#1f3d33 55%,#132720); border-radius:24px; overflow:hidden; box-shadow:0 28px 80px rgba(5,14,11,.5); border:1px solid rgba(217,189,133,.35); }
+  .chead { padding:32px 22px 10px; text-align:center; color:var(--cream); }
+  .chead .kicker { font-size:10.5px; letter-spacing:5px; color:var(--gold2); }
+  .chead .to { margin-top:20px; font-size:11px; letter-spacing:3px; color:var(--gold2); }
+  .chead .host { font-family:"Songti SC","STSong","SimSun",serif; font-size:20px; letter-spacing:1px; margin-top:6px; color:#fbf8f1; }
+  .chead h1 { font-family:"Songti SC","STSong","SimSun",serif; font-size:34px; letter-spacing:6px; margin:16px 0 8px; font-weight:600; color:#f2e6c9; }
+  .chead .courtesy { font-family:"Songti SC","STSong","SimSun",serif; font-size:13.5px; letter-spacing:2px; color:var(--gold2); }
+  .chead .when { font-family:"Songti SC","STSong","SimSun",serif; font-size:21px; margin-top:20px; color:#fbf8f1; font-weight:600; }
+  .chead .seat { font-family:"Songti SC","STSong","SimSun",serif; font-size:12.5px; color:rgba(247,243,234,.78); margin-top:6px; letter-spacing:1px; }
+  .cbody { padding:22px 20px 26px; background:var(--paper); }
+  .sec-title { text-align:center; font-size:11px; letter-spacing:4px; color:var(--gold); margin:16px 0 10px; display:flex; align-items:center; gap:10px; }
+  .sec-title::before,.sec-title::after { content:""; flex:1; height:1px; background:linear-gradient(90deg,transparent,rgba(184,137,63,.4)); }
+  .sec-title::after { background:linear-gradient(90deg,rgba(184,137,63,.4),transparent); }
+  .menu-list { background:#fffdf9; border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .menu-list .row { display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:10px 14px; border-bottom:1px dashed #efe7d6; }
+  .menu-list .row:last-child { border-bottom:none; }
+  .menu-list .nm { font-family:"Songti SC","STSong","SimSun",serif; font-size:15px; color:var(--ink); }
+  .menu-list .nm .idx { color:var(--gold); font-size:12px; margin-right:6px; }
+  .menu-list .st { font-size:10px; color:var(--amber); border:1px solid rgba(169,114,28,.4); border-radius:10px; padding:0 7px; margin-left:6px; white-space:nowrap; }
+  .menu-list .pr { font-size:13px; color:var(--gold); white-space:nowrap; }
+  .sumline { display:flex; justify-content:space-between; align-items:baseline; gap:4px 12px; flex-wrap:wrap; margin-top:12px; padding:0 2px; }
+  .sumline b { font-family:"Songti SC","STSong","SimSun",serif; font-size:18px; color:var(--ink); white-space:nowrap; }
+  .sumline span { font-size:11.5px; color:var(--muted); white-space:nowrap; margin-left:auto; }
+  .note { background:#fbf0dc; color:var(--amber); border-radius:10px; padding:9px 11px; font-size:12.5px; margin-top:14px; line-height:1.55; }
+  .diet { background:#eef5f0; color:var(--green); border-radius:10px; padding:9px 11px; font-size:12.5px; margin-top:10px; line-height:1.55; }
+  /* 操作区 */
+  .act { margin-top:18px; background:#fffdf9; border:1px solid var(--line); border-radius:16px; padding:16px 15px 14px; }
+  .act .q { text-align:center; font-family:"Songti SC","STSong","SimSun",serif; font-size:15px; color:var(--ink); margin-bottom:12px; }
+  .btns { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .btns button { min-height:48px; border-radius:12px; font-size:14.5px; font-weight:600; font-family:inherit; cursor:pointer; border:none; }
+  .btns .ok { background:linear-gradient(135deg,#2e5a4b,#1f3a32); color:#f2e6c9; box-shadow:0 8px 18px rgba(31,58,50,.3); }
+  .btns .adj { background:transparent; border:1.5px solid rgba(184,137,63,.55) !important; color:var(--gold); }
+  .btns button:active { filter:brightness(.95); }
+  .adjust-box { margin-top:12px; }
+  .adjust-box textarea { width:100%; min-height:86px; border:1.5px solid var(--line); border-radius:12px; padding:10px 12px; font-family:inherit; font-size:14px; color:#2b2a26; background:#fffdf9; resize:vertical; }
+  .chips { display:flex; flex-wrap:wrap; gap:7px; margin:10px 0 4px; }
+  .chips button { border:1px solid var(--line); background:#fdfbf6; color:#6d6352; border-radius:16px; padding:5px 12px; font-size:12px; font-family:inherit; cursor:pointer; }
+  .chips button.on { border-color:var(--gold); color:var(--gold); background:rgba(184,137,63,.08); }
+  .copybtn { width:100%; margin-top:12px; min-height:46px; border-radius:12px; border:none; background:linear-gradient(135deg,#c39a4f,#b8893f); color:#fff; font-size:14px; font-weight:600; font-family:inherit; cursor:pointer; box-shadow:0 6px 16px rgba(184,137,63,.28); }
+  .done { margin-top:18px; background:linear-gradient(145deg,#2c5345,#1f3d33); border:1.5px solid rgba(217,189,133,.7); border-radius:16px; padding:18px 15px 15px; text-align:center; }
+  .done .tick { width:52px; height:52px; margin:0 auto 8px; border-radius:50%; background:rgba(217,189,133,.16); border:1.5px solid var(--gold2); color:var(--gold2); font-size:26px; display:flex; align-items:center; justify-content:center; }
+  .done b { font-family:"Songti SC","STSong","SimSun",serif; color:#f2e6c9; font-size:18px; letter-spacing:3px; display:block; }
+  .done .cc { margin-top:8px; font-size:12px; color:var(--gold2); letter-spacing:1px; }
+  .done .reply { margin-top:10px; background:rgba(0,0,0,.25); border-radius:10px; padding:10px 11px; font-size:12px; color:rgba(247,243,234,.92); text-align:left; line-height:1.7; white-space:pre-wrap; word-break:break-all; }
+  .done .copybtn { margin-top:12px; }
+  .hint2 { font-size:10.5px; color:var(--muted); margin-top:10px; text-align:center; line-height:1.7; }
+  .contact { margin-top:16px; background:#fffdf9; border:1px solid var(--line); border-radius:16px; padding:13px 15px; font-size:12.5px; color:#6d6352; line-height:1.9; }
+  .contact a { color:var(--ink); font-weight:600; text-decoration:none; }
+  .foot { text-align:center; color:rgba(247,243,234,.55); font-size:11.5px; line-height:1.9; margin-top:22px; }
+  .foot b { color:var(--gold2); font-weight:500; }
+  .empty { background:var(--paper); border-radius:18px; padding:40px 22px; text-align:center; color:var(--muted); margin-top:18px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="brand">長季鮮<small id="brandSub">福安菜 × 厦门海鲜</small></div>
+  <div class="ornament"><i></i></div>
+  <div id="app"></div>
+  <div class="foot" id="foot"></div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const $=s=>document.querySelector(s);
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  function b64d(str){ let s=String(str||'').replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4) s+='='; const bin=atob(s); const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0)); return new TextDecoder().decode(bytes); }
+  function readPayload(){ const q=new URLSearchParams(location.search).get('d'); const m=String(location.hash||'').match(/d=([^&]+)/); const raw=q||(m&&m[1]); if(!raw) return null; try{ return JSON.parse(b64d(raw)); }catch(e){ return null; } }
+  function fmtDate(s){ if(!s) return ''; const p=String(s).split('-').map(Number); const d=new Date(p[0],(p[1]||1)-1,p[2]||1); return (d.getMonth()+1)+'月'+d.getDate()+'日 周'+('日一二三四五六'[d.getDay()]); }
+  const money=(n)=>'¥ '+(Number(n)||0).toLocaleString('zh-CN');
+  const P=readPayload();
+  if(!P||!P.o){ $('#app').innerHTML='<div class="empty">菜单确认链接无效或已过期。<br>请让店家重新发一份。</div>'; return; }
+  const shop=P.s||{}, o=P.o||{}, menu=P.m||[];
+  const total=menu.reduce((s,x)=>s+(Number(x.p)||0),0);
+  const per=o.ps?Math.round(total/(Number(o.ps)||1)):0;
+  const budgetTotal=o.b?(o.bm==='person'?(Number(o.b)||0)*(Number(o.ps)||0):(Number(o.b)||0)):0;
+  $('#brandSub').textContent=shop.c||'福安菜 × 厦门海鲜';
+
+  // 回复话术：确认码 + 订单号，店里一眼能对上哪一单
+  function replyText(kind, extra){
+    const L=[];
+    L.push(kind==='ok'?('菜单已确认 · '+o.code):('菜单想调整 · '+o.code));
+    L.push('确认码 '+P.cc);
+    L.push((shop.n||'长季鲜')+' · '+fmtDate(o.d)+' '+(o.t||'')+' · '+(o.r||'包厢')+' · '+(o.ps||'')+' 位');
+    if(kind==='ok'){
+      L.push('菜单 '+menu.length+' 道'+(total?(' · 合计 '+money(total)+(per?(' · 人均 '+money(per)):'')):''));
+      L.push('菜品没问题，就按这个来，谢谢！');
+    }else{
+      L.push('想调整的地方：'+(extra||'见下方备注'));
+      L.push('麻烦帮我看一下，谢谢！');
+    }
+    return L.join('\n');
+  }
+  async function copy(text,btn,okLabel){
+    try{
+      if(navigator.clipboard&&window.isSecureContext){ await navigator.clipboard.writeText(text); }
+      else{ const ta=document.createElement('textarea'); ta.value=text; ta.style.cssText='position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+      if(btn){ const old=btn.textContent; btn.textContent=okLabel||'已复制'; setTimeout(()=>btn.textContent=old,1500); }
+    }catch(e){ alert('复制失败，请长按文字手动复制'); }
+  }
+
+  const pre=menu.filter(x=>x.s==='preorder');
+  const diet=(o.di||[]).filter(x=>x&&x!=='无忌口');
+  const html='<div class="card-main"><div class="chead">'+
+    '<div class="kicker">MENU CONFIRMATION</div>'+
+    '<div class="to">谨 呈</div>'+
+    '<div class="host">'+esc(o.h||'贵客')+' 台鉴</div>'+
+    '<h1>菜 单 确 认</h1>'+
+    '<div class="courtesy">敬备菲酌 · 恭候台光</div>'+
+    '<div class="when">谨订于 '+esc(fmtDate(o.d))+' '+esc(o.t||'')+'</div>'+
+    '<div class="seat">席设 '+esc(o.r||'私厨包厢')+' · '+(o.ps||'')+' 位'+(o.oc?' · '+esc(o.oc):'')+'</div>'+
+    '</div><div class="cbody">'+
+    '<div class="sec-title">为 您 安 排 的 菜 单</div>'+
+    '<div class="menu-list">'+
+      menu.map((x,i)=>'<div class="row"><span class="nm"><span class="idx">'+String(i+1).padStart(2,'0')+'</span>'+esc(x.n)+(x.s==='preorder'?'<span class="st">需提前'+(x.l||1)+'天</span>':'')+'</span><span class="pr">'+(Number(x.p)?money(x.p):'')+'</span></div>').join('')+
+    '</div>'+
+    '<div class="sumline"><b>共 '+menu.length+' 道 · 合计 '+money(total)+'</b><span>'+(per?('人均 '+money(per)):'')+(budgetTotal?(' · 餐标 '+money(budgetTotal)):'')+'</span></div>'+
+    (pre.length?'<div class="note">带「需提前」的菜要早做备料，确认后店里就安排采购，如需调整请尽快告知。</div>':'')+
+    (diet.length?'<div class="diet">已为您避开忌口：'+esc(diet.join('、'))+'</div>':'')+
+    (o.sp?'<div class="note">特殊安排：'+esc(o.sp)+'</div>':'')+
+    '<div class="act" id="actBox">'+
+      '<div class="q">菜单您看可以吗？</div>'+
+      '<div class="btns"><button class="ok" id="btnOk">菜单没问题 · 确认</button><button class="adj" id="btnAdj">想调整一下</button></div>'+
+      '<div class="adjust-box" id="adjBox" style="display:none">'+
+        '<div class="chips" id="adjChips">'+['想换一道菜','想加一道菜','有忌口要补充','日期时间要改','其他'].map(t=>'<button data-t="'+t+'">'+t+'</button>').join('')+'</div>'+
+        '<textarea id="adjText" placeholder="比如：清蒸石斑换成辣炒口味、加一份佛跳墙、孩子不吃辣……"></textarea>'+
+        '<button class="copybtn" id="btnAdjCopy">复制反馈 · 发回给店里</button>'+
+      '</div>'+
+      '<div class="hint2">点「确认」后会生成一句确认回复，复制发回店家微信即可；<br>也可以直接回复本链接的转发消息。</div>'+
+    '</div>'+
+    '<div class="done" id="doneBox" style="display:none">'+
+      '<div class="tick">✓</div><b id="doneTitle">已 确 认</b>'+
+      '<div class="cc">订单 '+esc(o.code||'')+' · 确认码 '+esc(P.cc||'')+'</div>'+
+      '<div class="reply" id="replyText"></div>'+
+      '<button class="copybtn" id="btnReplyCopy">复制回复 · 发回给店里</button>'+
+      '<div class="hint2" style="color:rgba(231,214,174,.6)">把这句话发回给店里微信，流程就闭环了。</div>'+
+    '</div>'+
+    '<div class="contact">'+
+      (shop.p?('订座 / 改菜专线：<a href="tel:'+esc(shop.p)+'">'+esc(shop.p)+'</a><br>'):'')+
+      (shop.a?('门店地址：'+esc(shop.a)+'<br>'):'')+
+      '菜单以到店当日时令为准，偶有微调会提前和您打招呼。'+
+    '</div>'+
+    '</div></div>';
+  $('#app').innerHTML=html;
+  $('#foot').innerHTML='<b>'+esc(shop.n||'长季鲜')+' · 敬约</b>'+(shop.a?('<br>'+esc(shop.a)):'')+(shop.p?('<br>订座 <a style="color:var(--gold2)" href="tel:'+esc(shop.p)+'">'+esc(shop.p)+'</a>'):'');
+
+  let finalText='';
+  $('#btnOk').addEventListener('click',()=>{
+    finalText=replyText('ok');
+    $('#actBox').style.display='none';
+    $('#doneTitle').textContent='已 确 认';
+    $('#replyText').textContent=finalText;
+    $('#doneBox').style.display='block';
+    $('#doneBox').scrollIntoView({behavior:'smooth',block:'center'});
+  });
+  $('#btnAdj').addEventListener('click',()=>{
+    const box=$('#adjBox');
+    box.style.display=box.style.display==='none'?'block':'none';
+  });
+  $('#adjChips').addEventListener('click',(e)=>{
+    const b=e.target.closest('button'); if(!b) return;
+    b.classList.toggle('on');
+    const ta=$('#adjText');
+    if(b.classList.contains('on') && !ta.value.includes(b.dataset.t)){ ta.value=(ta.value?ta.value+'；':'')+b.dataset.t+'：'; }
+  });
+  $('#btnAdjCopy').addEventListener('click',(e)=>{
+    const txt=$('#adjText').value.trim();
+    if(!txt){ alert('先写一点想调整的内容，或点上面的快捷标签'); return; }
+    finalText=replyText('adj',txt);
+    copy(finalText,e.target,'已复制 · 发回给店里吧');
+    $('#actBox').style.display='none';
+    $('#doneTitle').textContent='反 馈 已 备 好';
+    $('#replyText').textContent=finalText;
+    $('#doneBox').style.display='block';
+  });
+  $('#btnReplyCopy').addEventListener('click',(e)=>copy(finalText||replyText('ok'),e.target,'已复制 · 发回给店里吧'));
+})();
+</script>
+</body>
+</html>

@@ -1,11 +1,12 @@
 /* 长季鲜 · 离线缓存 */
-const VERSION = '1.4.3';
+const VERSION = '1.5.0';
 const CACHE = 'changji-xian-v' + VERSION;
 const ASSETS = [
   './',
   './index.html',
   './menu.html',
   './invite.html',
+  './confirm.html',
   './styles.css?v=' + VERSION,
   './qrcode.min.js?v=' + VERSION,
   './data.js?v=' + VERSION,
