@@ -44,7 +44,7 @@
     { key: 'water', label: '矿泉水', unit: '瓶', calc: (n) => Math.max(2, Math.ceil(n / 2)), hint: '每 2 人 1 瓶' },
     { key: 'drink', label: '饮料', unit: '瓶', calc: (n) => Math.max(1, Math.ceil(n / 3)), hint: '每 3 人 1 瓶' }
   ];
-  // 菜单流转：接单 → 转店长 → 出菜单 → 转老板 → 发客户 → 客户确认 → 邀请函
+  // 菜单流转（店长出菜）：接单 → 转店长 → 出菜单 → 转老板 → 发客户 → 客户确认 → 邀请函
   const FLOW_STEPS = [
     { key: 'new', label: '接单', desc: '老板录入客人预定' },
     { key: 'manager', label: '转店长', desc: '店长按人数餐标配菜' },
@@ -53,6 +53,17 @@
     { key: 'customer', label: '发客户', desc: '客户点确认页链接，回复确认码收尾' },
     { key: 'confirmed', label: '已确认', desc: '可发邀请函' }
   ];
+  // 菜单流转（老板用 AI 出菜）：出菜单 → 店长审核 → 发客户 → 客户确认
+  const FLOW_STEPS_BOSS = [
+    { key: 'new', label: '接单', desc: '老板录入客人预定' },
+    { key: 'menu', label: '出菜单', desc: '老板用 AI 生成本桌菜单' },
+    { key: 'review', label: '店长审核', desc: '店长把关菜品与包厢，通过后老板发客户' },
+    { key: 'boss', label: '发客户', desc: '老板转发确认页给客户' },
+    { key: 'customer', label: '客户确认', desc: '客户点确认页链接，回复确认码收尾' },
+    { key: 'confirmed', label: '已确认', desc: '可发邀请函' }
+  ];
+  const FLOW_KEYS = FLOW_STEPS.concat(FLOW_STEPS_BOSS).map((s) => s.key);
+  function flowStepsOf(o) { return (o && o.flow && o.flow.bossGen) ? FLOW_STEPS_BOSS : FLOW_STEPS; }
 
   /* ---------- SVG 图标 ---------- */
   const svg = (p, extra) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" ' + (extra || '') + '>' + p + '</svg>';
@@ -507,7 +518,7 @@
   }
   function orderFlow(o) {
     const stage = o && o.flow && o.flow.stage;
-    if (stage && FLOW_STEPS.some((s) => s.key === stage)) return stage;
+    if (stage && FLOW_KEYS.includes(stage)) return stage;
     if (!o) return 'new';
     if (o.menuConfirmed || o.inviteCode) return 'confirmed';
     if ((o.dishes || []).length) return 'menu';
@@ -520,7 +531,7 @@
     o.flow.by = roleName();
     o.flow.history = o.flow.history || [];
     o.flow.history.push({ at: o.flow.at, by: roleName(), stage, note: note || '' });
-    const step = FLOW_STEPS.find((s) => s.key === stage);
+    const step = flowStepsOf(o).find((s) => s.key === stage);
     if (step) addLog(o, '流程：' + step.label + (note ? '（' + note + '）' : ''));
     touch(o);
   }
@@ -710,14 +721,14 @@
     const pending = alive(S.orders).filter((o) => o.status === 'pending').sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     const tomorrow = alive(S.orders).filter((o) => o.date === D.addDays(t, 1) && o.status !== 'cancelled').sort((a, b) => a.time.localeCompare(b.time));
     const vipOrders = todayOrders.filter((o) => { const c = orderCustomer(o); return c && (c.tags || []).some((x) => /VIP|老友/i.test(x)); });
-    // 流程待办：老板 → 店长配菜；店长 → 出菜单；老板 → 发客户 / 收确认
+    // 流程待办：店长 → 配菜 / 审核老板生成的菜单；老板 → 发客户 / 收确认
     const todo = alive(S.orders).filter((o) => ['pending', 'confirmed', 'notified'].includes(o.status)).filter((o) => {
       const st = orderFlow(o);
-      if (session.role === 'manager') return st === 'manager';
+      if (session.role === 'manager') return st === 'manager' || st === 'review';
       if (session.role === 'boss') return st === 'boss' || st === 'customer';
       return false;
     }).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-    const todoLabel = session.role === 'manager' ? '待我配菜' : '待我发客户 / 收确认';
+    const todoLabel = session.role === 'manager' ? '待我配菜 / 审核' : '待我发客户 / 收确认';
     return '<div class="hero"><div class="hero-date">' + D.fmtDateCN(t) + ' · ' + D.weekdayCN(t) + ' · ' + esc(S.settings.cuisine || '') + '</div>' +
       '<h2>' + nowGreeting() + '，' + esc(roleName()) + '</h2><p>' + (todayOrders.length ? '今天有 ' + todayOrders.length + ' 桌客人，忙而不乱。' : '今天还没有预定，先把客人接住。') + '</p>' +
       '<div class="hero-stats">' +
@@ -1202,13 +1213,14 @@
     const html = '<h3>AI 配菜 · ' + src.partySize + ' 人</h3><p class="sheet-sub">' + (src.order ? esc(orderName(src.order)) + ' · ' : '') + D.money(src.budget) + (src.budgetMode === 'person' ? '/位' : '/桌') + '（合计 ' + D.money(totalBudget) + '）' +
       (keptDishes.length ? ' · 保留指定 ' + keptDishes.length + ' 道' : '') +
       (cust ? ' · 参考 ' + esc(custLabel(cust)) + (tasteLine.length ? '（' + esc(tasteLine.join('、')) + '）' : '') + ' 的口味和常点' : (tasteLine.length ? ' · 已参考口味：' + esc(tasteLine.join('、')) : '')) + '</p>' +
+      (session.role === 'boss' && src.mode === 'order' ? '<div class="alert-line gold" style="margin:10px 0">' + I.check + '<div><b>老板身份生成：采用后菜单先交店长审核</b>，店长通过后才能转发给客户。</div></div>' : '') +
       roomLine +
       (keptConflicts.length ? '<div class="alert-line" style="margin-bottom:12px">' + I.alert + '<div><b>指定菜与忌口冲突：</b>' + esc(keptConflicts.map((x) => x.name).join('、')) + '。系统已保留，请和客人确认。</div></div>' : '') +
       menus.map((m) => '<div class="card pad mb12"><div class="between"><div class="sec-title">' + esc(m.title) + '</div><span class="status ' + (m.within ? 'notified' : 'warn') + '">' + D.money(m.total) + '</span></div>' +
         '<div class="small muted">' + esc(m.desc) + ' · 人均 ' + D.money(Math.round(m.perPerson)) + ' · ' + m.items.length + ' 道' + (m.preorder ? ' · 含 ' + m.preorder + ' 道预订单' : '') + ' · ' + (m.remaining >= 0 ? '余 ' + D.money(m.remaining) : '超 ' + D.money(-m.remaining)) + '</div>' +
         '<div class="chips mt8">' + m.items.map((x) => '<span class="chip ' + (x.status === 'preorder' ? 'gold' : '') + '">' + esc(x.name) + ' ' + D.money(x.price) + '</span>').join('') + '</div>' +
         (m.total < totalBudget * 0.7 ? '<div class="hint">当前菜价偏低，预算可再升级硬菜或加酒水。</div>' : '') +
-        '<button class="btn primary sm mt8" data-act="adopt-menu" data-key="' + m.key + '">采用这套菜单' + (sug && sug.room && !roomOk ? ' + 安排 ' + esc(sug.room.name) : '') + '</button></div>').join('') +
+        '<button class="btn primary sm mt8" data-act="adopt-menu" data-key="' + m.key + '">采用这套菜单' + (session.role === 'boss' && src.mode === 'order' ? '（交店长审核）' : (sug && sug.room && !roomOk ? ' + 安排 ' + esc(sug.room.name) : '')) + '</button></div>').join('') +
       '<div class="btn-row"><button class="btn ghost" data-act="close-sheet">再看看</button><button class="btn soft" data-act="gen-menu">重新生成</button></div>';
     ui.menuCache = menus;
     openSheet(html);
@@ -1232,11 +1244,20 @@
       o.menuSource = 'ai';
       o.dishConfirmed = true;
       if (roomId) o.roomId = roomId;
-      setFlow(o, 'menu', 'AI 出 ' + items.length + ' 道菜 · ' + D.money(m.total));
+      // 老板身份生成的 AI 菜单要过店长审核；店长自己生成的直接进入「出菜单」
+      const bossGen = session.role === 'boss';
+      o.flow = o.flow || { stage: 'new', history: [] };
+      if (bossGen) {
+        o.flow.bossGen = true;
+        setFlow(o, 'review', '老板 AI 出 ' + items.length + ' 道菜 · ' + D.money(m.total) + '，待店长审核');
+      } else {
+        delete o.flow.bossGen;
+        setFlow(o, 'menu', 'AI 出 ' + items.length + ' 道菜 · ' + D.money(m.total));
+      }
       S.meta.rev++;
       saveState({ snap: true });
       closeSheet(); render({ scroll: false });
-      toast('菜单已生成' + roomNote);
+      toast(bossGen ? '菜单已生成，待店长审核后发客户' : '菜单已生成' + roomNote);
     } else {
       const d = ui.form.data;
       d.dishes = items;
@@ -1255,9 +1276,10 @@
   }
   function flowBar(o) {
     const stage = orderFlow(o);
-    const idx = FLOW_STEPS.findIndex((s) => s.key === stage);
-    const cur = FLOW_STEPS[idx] || FLOW_STEPS[0];
-    return '<div class="flow-bar">' + FLOW_STEPS.map((s, i) => '<div class="flow-step ' + (i < idx ? 'done' : (i === idx ? 'on' : '')) + '"><span class="fs-dot">' + (i < idx ? '✓' : (i + 1)) + '</span><span class="fs-label">' + s.label + '</span></div>' + (i < FLOW_STEPS.length - 1 ? '<span class="flow-line ' + (i < idx ? 'done' : '') + '"></span>' : '')).join('') +
+    const STEPS = flowStepsOf(o);
+    const idx = STEPS.findIndex((s) => s.key === stage);
+    const cur = STEPS[idx] || STEPS[0];
+    return '<div class="flow-bar">' + STEPS.map((s, i) => '<div class="flow-step ' + (i < idx ? 'done' : (i === idx ? 'on' : '')) + '"><span class="fs-dot">' + (i < idx ? '✓' : (i + 1)) + '</span><span class="fs-label">' + s.label + '</span></div>' + (i < STEPS.length - 1 ? '<span class="flow-line ' + (i < idx ? 'done' : '') + '"></span>' : '')).join('') +
       '</div><div class="flow-hint">' + esc(cur.desc) + (o.flow && o.flow.at ? ' · ' + esc(String(o.flow.at).replace('T', ' ').slice(5, 16)) + ' ' + esc(o.flow.by || '') : '') + '</div>';
   }
   function viewOrderDetail() {
@@ -1279,8 +1301,12 @@
     if (canManage) {
       if (stage === 'new') actions.push('<button class="btn primary" data-act="flow-manager">' + I.share + ' 转给店长配菜</button>');
       if (stage === 'manager') actions.push('<button class="btn gold block" data-act="ai-menu">' + I.spark + ' AI 自动配菜 + 排包厢</button>');
-      if (stage === 'menu') actions.push('<button class="btn primary" data-act="flow-boss">' + I.share + ' 发给老板确认</button><button class="btn soft" data-act="ai-menu">重新配菜</button>');
-      if (stage === 'boss') actions.push('<button class="btn primary" data-act="flow-customer">' + I.share + ' 转发给客户确认</button>');
+      if (stage === 'menu') actions.push('<button class="btn primary" data-act="flow-boss">' + I.share + ' 发给老板确认</button><button class="btn soft" data-act="ai-menu">重新配菜</button><button class="btn gold" data-act="flow-customer">' + I.share + ' 直接发客户确认</button>');
+      if (stage === 'review') {
+        if (session.role === 'manager') actions.push('<button class="btn gold block" data-act="review-pass">' + I.check + ' 审核通过，待老板发客户</button><button class="btn soft" data-act="ai-menu">重新配菜</button><button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button>');
+        else actions.push('<button class="btn soft" data-act="ai-menu">重新配菜</button><button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button>');
+      }
+      if (stage === 'boss') actions.push('<button class="btn primary" data-act="flow-customer">' + I.share + ' 转发给客户确认</button><button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button>');
       if (stage === 'customer') actions.push('<button class="btn primary" data-act="flow-confirm">' + I.check + ' 客户已确认菜品</button><button class="btn gold" data-act="import-menu-confirm">' + I.check + ' 录入客户确认码</button><button class="btn soft" data-act="flow-customer">再发一次</button>');
       if (stage === 'confirmed' && o.status !== 'cancelled') actions.push('<button class="btn gold block" data-act="open-invite">' + I.share + ' 生成/发送邀请函</button>');
       else if (o.status !== 'cancelled') actions.push('<button class="btn soft" data-act="open-invite">' + I.share + ' 邀请函（客户未确认菜单）</button>');
@@ -1493,6 +1519,7 @@
       (badHost ? '<div class="alert-line" style="margin-bottom:10px">' + I.alert + '<div><b>当前是本地地址，客户手机打不开链接。</b>正式部署后再发送，或改用「只复制文字」。</div></div>' : '') +
       '<div class="share-text">' + esc(text) + '</div>' +
       '<div class="btn-row mt8"><button class="btn primary" data-act="copy-forward" data-id="' + o.id + '" data-stage="customer" data-text="' + esc(text) + '">' + I.share + ' 复制并标记已发送</button><button class="btn soft" data-act="copy-confirm-text" data-id="' + o.id + '">只复制文字（不带链接）</button></div>' +
+      '<button class="btn ghost block mt8" data-act="preview-confirm" data-id="' + o.id + '">预览客户将看到的确认页</button>' +
       '<button class="btn gold block mt8" data-act="import-menu-confirm" data-id="' + o.id + '">' + I.check + ' 客户回复了？录入确认收尾</button>' +
       '<button class="btn ghost block mt8" data-act="close-sheet">关闭</button>' +
       '<div class="hint">客户点「确认」后会得到一句带确认码的回复；把那句话粘到「录入确认」里即可自动完成。客户直接回「可以 / 没问题」也认。</div>');
@@ -2639,6 +2666,25 @@
       case 'gen-menu': closeSheet(); openMenuPlanner(ui.menuTarget === 'order' ? 'order' : 'form'); break;
       case 'ai-menu': openMenuPlanner('order'); break;
       case 'adopt-menu': adoptMenu(el.dataset.key); break;
+      case 'review-pass': {
+        const o = alive(S.orders).find((x) => x.id === ui.params.orderId); if (!o) break;
+        if (session.role !== 'manager') { toast('只有店长可以审核'); break; }
+        confirmSheet('店长审核通过？', '通过后菜单交回老板，由老板转发给客户确认。', '审核通过', () => {
+          setFlow(o, 'boss', '店长审核通过');
+          S.meta.rev++;
+          saveState({ snap: true }); closeSheet(); render({ scroll: false });
+          toast('已审核通过，等老板发客户');
+        });
+        break;
+      }
+      case 'preview-confirm': {
+        const o = alive(S.orders).find((x) => x.id === (el.dataset.id || ui.params.orderId)); if (!o) break;
+        if (!(o.dishes || []).length) { toast('还没有菜单，先 AI 配菜'); break; }
+        const link = pageLink('confirm.html', { d: b64e(JSON.stringify(confirmPayload(o))) });
+        window.__confirmLink = link;
+        window.open(link, '_blank');
+        break;
+      }
       case 'flow-manager': {
         const o = alive(S.orders).find((x) => x.id === ui.params.orderId); if (!o) break;
         openForwardSheet(o, 'manager', '转给店长配菜', '复制这段话发给店长，订单会自动进入店长的「待我配菜」。', handoffText(o));
