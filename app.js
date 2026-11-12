@@ -1309,7 +1309,7 @@
       if (stage === 'boss') actions.push('<button class="btn primary" data-act="flow-customer">' + I.share + ' 转发给客户确认</button><button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button>');
       if (stage === 'customer') actions.push('<button class="btn primary" data-act="flow-confirm">' + I.check + ' 客户已确认菜品</button><button class="btn gold" data-act="import-menu-confirm">' + I.check + ' 录入客户确认码</button><button class="btn soft" data-act="flow-customer">再发一次</button>');
       if (stage === 'confirmed' && o.status !== 'cancelled') actions.push('<button class="btn gold block" data-act="open-invite">' + I.share + ' 生成/发送邀请函</button>');
-      else if (o.status !== 'cancelled') actions.push('<button class="btn soft" data-act="open-invite">' + I.share + ' 邀请函（客户未确认菜单）</button>');
+      else if (o.status !== 'cancelled') actions.push('<button class="btn soft" data-act="open-invite">' + I.share + ' 邀请函（待客户确认菜单）</button>');
       if (o.status === 'pending') actions.push('<button class="btn primary" data-act="confirm-order">审核通过并通知</button>');
       if (o.status === 'confirmed') actions.push('<button class="btn primary" data-act="notify-order">通知后厨 / 服务员</button>');
       if (o.status === 'notified') actions.push('<button class="btn primary" data-act="complete-order">标记已完成</button>');
@@ -2259,8 +2259,9 @@
   function openInviteSheet(id) {
     if (!can('invite')) { toast('邀请函由老板 / 店长发送'); return; }
     const o = alive(S.orders).find((x) => x.id === id); if (!o) return;
+    // 客户确认是必经步骤：未确认菜单的单子不能出邀请函，防止发出后改菜造成信息不一致
     if (orderFlow(o) !== 'confirmed') {
-      confirmSheet('菜单还没确认', '客户还没确认菜品。现在发邀请函，之后改菜要重发一份。仍要生成吗？', '继续生成', () => doOpenInvite(o));
+      toast('菜单还没经过客户确认：先「转发给客户确认」，客户回复后录入确认码，再生成邀请函');
       return;
     }
     doOpenInvite(o);
