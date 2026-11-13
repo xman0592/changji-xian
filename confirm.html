@@ -66,6 +66,9 @@
   .done .cc { margin-top:8px; font-size:12px; color:var(--gold2); letter-spacing:1px; }
   .done .reply { margin-top:10px; background:rgba(0,0,0,.25); border-radius:10px; padding:10px 11px; font-size:12px; color:rgba(247,243,234,.92); text-align:left; line-height:1.7; white-space:pre-wrap; word-break:break-all; }
   .done .copybtn { margin-top:12px; }
+  /* 确认后主操作是打开邀请函，复制回复降为次要按钮 */
+  .done #btnReplyCopy { background:rgba(217,189,133,.16); color:#f2e6c9; border:1.5px solid rgba(217,189,133,.55); box-shadow:none; font-weight:500; }
+  .done #linkInvite { font-size:15px; letter-spacing:.5px; }
   .hint2 { font-size:10.5px; color:var(--muted); margin-top:10px; text-align:center; line-height:1.7; }
   .contact { margin-top:16px; background:#fffdf9; border:1px solid var(--line); border-radius:16px; padding:13px 15px; font-size:12.5px; color:#6d6352; line-height:1.9; }
   .contact a { color:var(--ink); font-weight:600; text-decoration:none; }
@@ -93,6 +96,21 @@
   const P=readPayload();
   if(!P||!P.o){ $('#app').innerHTML='<div class="empty">菜单确认链接无效或已过期。<br>请让店家重新发一份。</div>'; return; }
   const shop=P.s||{}, o=P.o||{}, menu=P.m||[];
+  // 客户点「确认」后当场拼邀请函链接（与 app.js invitePayload v4 同结构），确认即出函
+  function b64e(str){ const bytes=new TextEncoder().encode(str); let bin=''; bytes.forEach(b=>{ bin+=String.fromCharCode(b); }); return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+  function inviteLink(){
+    const iv={ v:4, t:'invite',
+      s:{ n:shop.n, c:shop.c, h:shop.h, p:shop.p, a:shop.a, g:shop.g||'', ad:shop.ad||'', m:shop.m||null },
+      c:P.c||[],
+      o:{ d:o.d, t:o.t, r:o.r, h:o.h, s:o.ps, c:o.oc||'', sp:o.sp||'', ds:menu.map(x=>x.n) } };
+    // 带上 sharecode（托管站点的访问凭证），客户点开后邀请函才不会被 403
+    const keep=new URLSearchParams();
+    const sc=new URLSearchParams(location.search).get('sharecode');
+    if(sc) keep.set('sharecode',sc);
+    const dir=location.pathname.replace(/[^/]*$/,'');
+    const base=(location.origin&&location.origin!=='null')?(location.origin+dir):dir;
+    return base+'invite.html?d='+b64e(JSON.stringify(iv))+(sc?('&'+keep.toString()):'');
+  }
   const total=menu.reduce((s,x)=>s+(Number(x.p)||0),0);
   const per=o.ps?Math.round(total/(Number(o.ps)||1)):0;
   const budgetTotal=o.b?(o.bm==='person'?(Number(o.b)||0)*(Number(o.ps)||0):(Number(o.b)||0)):0;
@@ -155,7 +173,8 @@
       '<div class="cc">订单 '+esc(o.code||'')+' · 确认码 '+esc(P.cc||'')+'</div>'+
       '<div class="reply" id="replyText"></div>'+
       '<button class="copybtn" id="btnReplyCopy">复制回复 · 发回给店里</button>'+
-      '<div class="hint2" style="color:rgba(231,214,174,.6)">把这句话发回给店里微信，流程就闭环了。</div>'+
+      '<a class="copybtn" id="linkInvite" href="#" style="display:block;text-align:center;line-height:46px;text-decoration:none;margin-top:10px">查看邀请函 · 可转发给同席亲友</a>'+
+      '<div class="hint2" style="color:rgba(231,214,174,.6)">邀请函已生成，点上面按钮打开，转发给同席的亲友即可。</div>'+
     '</div>'+
     '<div class="contact">'+
       (shop.p?('订座 / 改菜专线：<a href="tel:'+esc(shop.p)+'">'+esc(shop.p)+'</a><br>'):'')+
@@ -167,11 +186,13 @@
   $('#foot').innerHTML='<b>'+esc(shop.n||'长季鲜')+' · 敬约</b>'+(shop.a?('<br>'+esc(shop.a)):'')+(shop.p?('<br>订座 <a style="color:var(--gold2)" href="tel:'+esc(shop.p)+'">'+esc(shop.p)+'</a>'):'');
 
   let finalText='';
+  $('#linkInvite').setAttribute('href', inviteLink());
   $('#btnOk').addEventListener('click',()=>{
     finalText=replyText('ok');
     $('#actBox').style.display='none';
     $('#doneTitle').textContent='已 确 认';
     $('#replyText').textContent=finalText;
+    $('#linkInvite').setAttribute('href', inviteLink());
     $('#doneBox').style.display='block';
     $('#doneBox').scrollIntoView({behavior:'smooth',block:'center'});
   });

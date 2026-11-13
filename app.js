@@ -1299,7 +1299,11 @@
     const stage = orderFlow(o);
     const actions = [];
     if (canManage) {
-      if (stage === 'new') actions.push('<button class="btn primary" data-act="flow-manager">' + I.share + ' 转给店长配菜</button>');
+      if (stage === 'new') {
+        // 店长自己打开新单：转给自己没意义，直接给配菜入口
+        if (session.role === 'manager') actions.push('<button class="btn gold block" data-act="ai-menu">' + I.spark + ' AI 自动配菜 + 排包厢</button>');
+        else actions.push('<button class="btn primary" data-act="flow-manager">' + I.share + ' 转给店长配菜</button>');
+      }
       if (stage === 'manager') actions.push('<button class="btn gold block" data-act="ai-menu">' + I.spark + ' AI 自动配菜 + 排包厢</button>');
       if (stage === 'menu') actions.push('<button class="btn primary" data-act="flow-boss">' + I.share + ' 发给老板确认</button><button class="btn soft" data-act="ai-menu">重新配菜</button><button class="btn gold" data-act="flow-customer">' + I.share + ' 直接发客户确认</button>');
       if (stage === 'review') {
@@ -1497,9 +1501,13 @@
     return 'C' + ('0000' + h.toString(36).toUpperCase()).slice(-4);
   }
   function confirmPayload(o) {
+    const s = S.settings;
+    const mgr = (s.managerName || s.managerPhone) ? { n: s.managerName || '', p: s.managerPhone || s.phone || '', t: s.managerTitle || '包厢服务经理' } : null;
     return {
       v: 1, t: 'confirm', cc: ccOf(o.id),
-      s: { n: S.settings.shopName, c: S.settings.cuisine, p: S.settings.phone, a: S.settings.address },
+      // s/c 同时够客户确认页和邀请函页用：客户点「确认」后当场拼邀请函链接，不用再等店里发
+      s: { n: s.shopName, c: s.cuisine, h: s.businessHours, p: s.phone, a: s.address, g: s.slogan || '', ad: s.adText || '', m: mgr },
+      c: D.classicDishes(S, 6).map((d) => ({ n: d.name, pr: Number(d.price) || 0, no: d.note || '' })),
       o: {
         id: o.id, code: o.code, d: o.date, t: o.time, r: roomName(o.roomId), h: o.customerName || '贵客',
         ps: o.partySize, oc: o.occasion || '', b: Number(o.budget) || 0, bm: o.budgetMode || 'table',
@@ -1546,7 +1554,8 @@
     setFlow(o, 'confirmed', okByCode ? '客户确认码 ' + cc : '客户回复确认');
     S.meta.rev++;
     saveState({ snap: true }); closeSheet(); render({ scroll: false });
-    toast('客户已确认，可以发邀请函了');
+    toast('客户已确认，邀请函已生成');
+    doOpenInvite(o);
   }
 
   /* ---------- 日历 ---------- */
@@ -2723,14 +2732,15 @@
       }
       case 'flow-confirm': {
         const o = alive(S.orders).find((x) => x.id === ui.params.orderId); if (!o) break;
-        confirmSheet('客户已确认菜单？', '确认后流程走到「已确认」，就可以生成邀请函发给客户了。', '确认已确认', () => {
+        confirmSheet('客户已确认菜单？', '确认后流程走到「已确认」，邀请函会直接生成，发给客户就行。', '确认已确认', () => {
           o.menuConfirmed = true;
           o.menuConfirmedAt = D.nowISO();
           setFlow(o, 'confirmed');
           S.meta.rev++;
           saveState({ snap: true });
           closeSheet(); render({ scroll: false });
-          toast('已确认，可以发邀请函了');
+          doOpenInvite(o);
+          toast('已确认，邀请函已生成');
         });
         break;
       }

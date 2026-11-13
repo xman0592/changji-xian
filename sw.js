@@ -1,5 +1,5 @@
 /* 长季鲜 · 离线缓存 */
-const VERSION = '1.6.1';
+const VERSION = '1.7.0';
 const CACHE = 'changji-xian-v' + VERSION;
 const ASSETS = [
   './',
