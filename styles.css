@@ -788,6 +788,14 @@ button.svc-btn:active { background: #eef3ee; }
 .flow-line.done { background: #b9d8c7; }
 .flow-hint { font-size: 11.5px; color: var(--muted); margin-top: 9px; line-height: 1.5; }
 
+/* 下一步行动卡：阶段主操作固定在详情页顶部，不用滚到底 */
+.next-card { margin-top: 10px; border: 1px solid rgba(184, 137, 63, .38); background: linear-gradient(180deg, #fffdf8, #faf4e6); box-shadow: 0 4px 14px rgba(184, 137, 63, .1); }
+.next-head { display: flex; align-items: center; gap: 8px; }
+.next-tag { flex: none; font-size: 9.5px; letter-spacing: 1.5px; color: var(--cream); background: var(--ink); padding: 3px 9px; border-radius: 999px; }
+.next-title { font-size: 15px; color: var(--ink); font-weight: 600; font-family: var(--serif); line-height: 1.4; }
+.next-desc { font-size: 11.5px; color: var(--muted); line-height: 1.6; margin-top: 7px; }
+.next-card .btn-row { margin-top: 10px; }
+
 /* ---------- 转发话术 ---------- */
 .share-text { background: #f6f1e6; border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; font-size: 12.5px; line-height: 1.72; color: #47423a; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto; }
 

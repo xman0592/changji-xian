@@ -1282,6 +1282,19 @@
     return '<div class="flow-bar">' + STEPS.map((s, i) => '<div class="flow-step ' + (i < idx ? 'done' : (i === idx ? 'on' : '')) + '"><span class="fs-dot">' + (i < idx ? '✓' : (i + 1)) + '</span><span class="fs-label">' + s.label + '</span></div>' + (i < STEPS.length - 1 ? '<span class="flow-line ' + (i < idx ? 'done' : '') + '"></span>' : '')).join('') +
       '</div><div class="flow-hint">' + esc(cur.desc) + (o.flow && o.flow.at ? ' · ' + esc(String(o.flow.at).replace('T', ' ').slice(5, 16)) + ' ' + esc(o.flow.by || '') : '') + '</div>';
   }
+  function nextStepHint(o, stage) {
+    const mgr = session.role === 'manager';
+    const map = {
+      new: mgr ? ['这单要你配菜', 'AI 按人数和餐标出菜单，并自动排包厢'] : ['转给店长配菜', '转给店长后，店长首页「待我配菜」会出现这单'],
+      manager: ['等店长配菜', 'AI 按人数和餐标出三套菜单，并自动排包厢'],
+      menu: ['菜单已出，可直接发客户', '点「直接发客户确认」把菜单确认页发给客户；也可先发老板过目'],
+      review: mgr ? ['老板出的菜单，待你审核', '审核通过后交回老板，老板和店长都能直接转发客户'] : ['菜单已交店长审核', '店长审核通过后，你和店长都能直接转发给客户确认'],
+      boss: ['可以发客户了', '点「转发给客户确认」复制菜单链接，客户点开就能一键确认'],
+      customer: ['等客户确认', '客户回复后把整段回复粘进「录入客户确认码」，自动确认并生成邀请函'],
+      confirmed: ['客户已确认菜单', '生成邀请函长图，在微信里长按转发给客人']
+    };
+    return map[stage] || ['下一步', ''];
+  }
   function viewOrderDetail() {
     const o = selectedOrder();
     if (!o) return emptyState('list', '订单不存在', '可能已被删除，返回列表看看。');
@@ -1297,40 +1310,44 @@
     const attend = guests.filter((g) => g.attend !== false);
     const guestDiet = Array.from(new Set(guests.flatMap((g) => g.dietary || [])));
     const stage = orderFlow(o);
-    const actions = [];
+    // 阶段相关的主操作放详情页顶部「下一步」卡里（放到页底没人找得到）
+    const stepActions = [];
+    const adminActions = [];
     if (canManage) {
       if (stage === 'new') {
         // 店长自己打开新单：转给自己没意义，直接给配菜入口
-        if (session.role === 'manager') actions.push('<button class="btn gold block" data-act="ai-menu">' + I.spark + ' AI 自动配菜 + 排包厢</button>');
-        else actions.push('<button class="btn primary" data-act="flow-manager">' + I.share + ' 转给店长配菜</button>');
+        if (session.role === 'manager') stepActions.push('<button class="btn gold block" data-act="ai-menu">' + I.spark + ' AI 自动配菜 + 排包厢</button>');
+        else stepActions.push('<button class="btn primary block" data-act="flow-manager">' + I.share + ' 转给店长配菜</button>');
       }
-      if (stage === 'manager') actions.push('<button class="btn gold block" data-act="ai-menu">' + I.spark + ' AI 自动配菜 + 排包厢</button>');
-      if (stage === 'menu') actions.push('<button class="btn primary" data-act="flow-boss">' + I.share + ' 发给老板确认</button><button class="btn soft" data-act="ai-menu">重新配菜</button><button class="btn gold" data-act="flow-customer">' + I.share + ' 直接发客户确认</button>');
+      if (stage === 'manager') stepActions.push('<button class="btn gold block" data-act="ai-menu">' + I.spark + ' AI 自动配菜 + 排包厢</button>');
+      if (stage === 'menu') stepActions.push('<button class="btn gold block" data-act="flow-customer">' + I.share + ' 直接发客户确认</button><button class="btn primary" data-act="flow-boss">' + I.share + ' 发给老板确认</button><button class="btn soft" data-act="ai-menu">重新配菜</button>');
       if (stage === 'review') {
-        if (session.role === 'manager') actions.push('<button class="btn gold block" data-act="review-pass">' + I.check + ' 审核通过，待老板发客户</button><button class="btn soft" data-act="ai-menu">重新配菜</button><button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button>');
-        else actions.push('<button class="btn soft" data-act="ai-menu">重新配菜</button><button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button>');
+        if (session.role === 'manager') stepActions.push('<button class="btn gold block" data-act="review-pass">' + I.check + ' 审核通过，交老板发客户</button><button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button><button class="btn soft" data-act="ai-menu">重新配菜</button>');
+        else stepActions.push('<button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button><button class="btn soft" data-act="ai-menu">重新配菜</button>');
       }
-      if (stage === 'boss') actions.push('<button class="btn primary" data-act="flow-customer">' + I.share + ' 转发给客户确认</button><button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button>');
-      if (stage === 'customer') actions.push('<button class="btn primary" data-act="flow-confirm">' + I.check + ' 客户已确认菜品</button><button class="btn gold" data-act="import-menu-confirm">' + I.check + ' 录入客户确认码</button><button class="btn soft" data-act="flow-customer">再发一次</button>');
-      if (stage === 'confirmed' && o.status !== 'cancelled') actions.push('<button class="btn gold block" data-act="open-invite">' + I.share + ' 生成/发送邀请函</button>');
-      else if (o.status !== 'cancelled') actions.push('<button class="btn soft" data-act="open-invite">' + I.share + ' 邀请函（待客户确认菜单）</button>');
-      if (o.status === 'pending') actions.push('<button class="btn primary" data-act="confirm-order">审核通过并通知</button>');
-      if (o.status === 'confirmed') actions.push('<button class="btn primary" data-act="notify-order">通知后厨 / 服务员</button>');
-      if (o.status === 'notified') actions.push('<button class="btn primary" data-act="complete-order">标记已完成</button>');
+      if (stage === 'boss') stepActions.push('<button class="btn gold block" data-act="flow-customer">' + I.share + ' 转发给客户确认</button><button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button>');
+      if (stage === 'customer') stepActions.push('<button class="btn gold block" data-act="import-menu-confirm">' + I.check + ' 录入客户确认码</button><button class="btn soft" data-act="flow-confirm">' + I.check + ' 客户已确认菜品</button><button class="btn soft" data-act="flow-customer">再发一次</button>');
+      if (stage === 'confirmed' && o.status !== 'cancelled') stepActions.push('<button class="btn gold block" data-act="open-invite">' + I.share + ' 生成/发送邀请函</button>');
+      else if (o.status !== 'cancelled') stepActions.push('<button class="btn ghost xs block" data-act="open-invite">' + I.share + ' 邀请函（待客户确认菜单后才能生成）</button>');
+      if (o.status === 'pending') adminActions.push('<button class="btn primary" data-act="confirm-order">审核通过并通知</button>');
+      if (o.status === 'confirmed') adminActions.push('<button class="btn primary" data-act="notify-order">通知后厨 / 服务员</button>');
+      if (o.status === 'notified') adminActions.push('<button class="btn primary" data-act="complete-order">标记已完成</button>');
       if (['pending', 'confirmed', 'notified'].includes(o.status)) {
-        actions.push('<button class="btn soft" data-act="edit-order">修改</button>');
-        actions.push('<button class="btn danger" data-act="cancel-order">取消</button>');
+        adminActions.push('<button class="btn soft" data-act="edit-order">修改</button>');
+        adminActions.push('<button class="btn danger" data-act="cancel-order">取消</button>');
       }
     }
-    if (o.status === 'done') actions.push('<button class="btn soft" data-act="duplicate-order">再来一单</button>');
-    actions.push('<button class="btn soft" data-act="copy-order">复制订单</button>');
-    if (isBoss && !o.deleted) actions.push('<button class="btn danger" data-act="delete-order">删除</button>');
+    if (o.status === 'done') adminActions.push('<button class="btn soft" data-act="duplicate-order">再来一单</button>');
+    adminActions.push('<button class="btn soft" data-act="copy-order">复制订单</button>');
+    if (isBoss && !o.deleted) adminActions.push('<button class="btn danger" data-act="delete-order">删除</button>');
+    const nextHint = nextStepHint(o, stage);
     return '<div class="detail-hero"><div class="dh-top"><div class="dh-code">' + esc(o.code) + '</div>' + statusBadge(o) + '</div>' +
       '<div class="dh-name">' + esc(orderName(o)) + '</div>' +
       '<div class="dh-meta"><span>' + esc(D.relativeDay(o.date)) + ' ' + esc(o.time) + '</span><span>' + esc(room || '包厢待定') + '</span><span>' + (o.partySize || '?') + ' 位</span></div>' +
       '<div class="dh-tags chips">' + (o.dietary || []).filter((x) => x !== '无忌口').map((x) => chip(x, 'red')).join('') + (o.occasion ? chip(o.occasion, 'gold') : '') + (o.budget ? chip(D.money(o.budget) + (o.budgetMode === 'person' ? '/位' : '/桌'), 'green') : '') + ((o.tasteHints || []).length ? chip('口味 ' + o.tasteHints.slice(0, 3).join('、'), 'outline') : '') + '</div></div>' +
       '<div class="detail-body">' +
       '<div class="card pad flow-card">' + flowBar(o) + '</div>' +
+      (stepActions.length ? '<div class="card pad next-card"><div class="next-head"><span class="next-tag">下一步</span><b class="next-title">' + esc(nextHint[0]) + '</b></div>' + (nextHint[1] ? '<div class="next-desc">' + esc(nextHint[1]) + '</div>' : '') + '<div class="btn-row mt8">' + stepActions.join('') + '</div></div>' : '') +
       '<div class="card pad"><div class="info-grid">' +
         info('日期', D.fmtDateCN(o.date) + ' ' + D.weekdayCN(o.date)) +
         info('时间', o.time) +
@@ -1368,7 +1385,7 @@
         '</div></div>' : '') +
       '<div class="section"><div class="sec-head"><div class="sec-title">操作记录</div></div><div class="card pad"><div class="kv">' +
         (o.changeLog || []).slice().reverse().map((l) => '<div><b>' + esc(l.by || '') + '</b> · ' + esc(l.text) + '<span class="tiny muted"> ' + esc((l.at || '').replace('T', ' ').slice(0, 16)) + '</span></div>').join('') + '</div></div></div>' +
-      (actions.length ? '<div class="btn-row mt16">' + actions.join('') + '</div>' : '') +
+      (adminActions.length ? '<div class="section"><div class="sec-head"><div class="sec-title">其他操作</div></div><div class="btn-row">' + adminActions.join('') + '</div></div>' : '') +
       '<div style="height:14px"></div></div>';
   }
   function info(k, v) { return '<div class="info-row"><span class="k">' + esc(k) + '</span><span class="v">' + esc(v) + '</span></div>'; }
