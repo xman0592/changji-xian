@@ -44,26 +44,19 @@
     { key: 'water', label: '矿泉水', unit: '瓶', calc: (n) => Math.max(2, Math.ceil(n / 2)), hint: '每 2 人 1 瓶' },
     { key: 'drink', label: '饮料', unit: '瓶', calc: (n) => Math.max(1, Math.ceil(n / 3)), hint: '每 3 人 1 瓶' }
   ];
-  // 菜单流转（店长出菜）：接单 → 转店长 → 出菜单 → 转老板 → 发客户 → 客户确认 → 邀请函
+  // 菜单流转（统一一条主线）：接单 → 出菜单 → 店长审核 → 发客户确认 → 客户确认 → 邀请函
   const FLOW_STEPS = [
-    { key: 'new', label: '接单', desc: '老板录入客人预定' },
-    { key: 'manager', label: '转店长', desc: '店长按人数餐标配菜' },
-    { key: 'menu', label: '出菜单', desc: 'AI 生成本桌菜单' },
-    { key: 'boss', label: '转老板', desc: '老板核对后发客户' },
-    { key: 'customer', label: '发客户', desc: '客户点确认页链接，回复确认码收尾' },
-    { key: 'confirmed', label: '已确认', desc: '可发邀请函' }
+    { key: 'new', label: '接单', desc: '老板录入预定，可一键 AI 生成菜单' },
+    { key: 'menu', label: '出菜单', desc: 'AI 按人数餐标配菜，出完交店长审核' },
+    { key: 'review', label: '店长审核', desc: '店长核对菜品，要改就直接改，没问题点通过' },
+    { key: 'customer', label: '发客户', desc: '老板、店长都能转发菜单给客户确认' },
+    { key: 'confirmed', label: '已确认', desc: '客户已确认菜单，可生成邀请函' }
   ];
-  // 菜单流转（老板用 AI 出菜）：出菜单 → 店长审核 → 发客户 → 客户确认
-  const FLOW_STEPS_BOSS = [
-    { key: 'new', label: '接单', desc: '老板录入客人预定' },
-    { key: 'menu', label: '出菜单', desc: '老板用 AI 生成本桌菜单' },
-    { key: 'review', label: '店长审核', desc: '店长把关菜品与包厢，通过后老板发客户' },
-    { key: 'boss', label: '发客户', desc: '老板转发确认页给客户' },
-    { key: 'customer', label: '客户确认', desc: '客户点确认页链接，回复确认码收尾' },
-    { key: 'confirmed', label: '已确认', desc: '可发邀请函' }
-  ];
-  const FLOW_KEYS = FLOW_STEPS.concat(FLOW_STEPS_BOSS).map((s) => s.key);
-  function flowStepsOf(o) { return (o && o.flow && o.flow.bossGen) ? FLOW_STEPS_BOSS : FLOW_STEPS; }
+  const FLOW_STEPS_BOSS = FLOW_STEPS;
+  const FLOW_KEYS = FLOW_STEPS.map((s) => s.key).concat(['manager', 'boss']);
+  // 旧版本流程阶段 → 新流程：转店长等同待配菜，转老板等同待发客户
+  const FLOW_LEGACY = { manager: 'new', boss: 'customer' };
+  function flowStepsOf() { return FLOW_STEPS; }
 
   /* ---------- SVG 图标 ---------- */
   const svg = (p, extra) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" ' + (extra || '') + '>' + p + '</svg>';
@@ -517,7 +510,8 @@
     return conflict ? c.name + '（尾' + tail + '）' : c.name;
   }
   function orderFlow(o) {
-    const stage = o && o.flow && o.flow.stage;
+    let stage = o && o.flow && o.flow.stage;
+    if (stage && FLOW_LEGACY[stage]) stage = FLOW_LEGACY[stage];
     if (stage && FLOW_KEYS.includes(stage)) return stage;
     if (!o) return 'new';
     if (o.menuConfirmed || o.inviteCode) return 'confirmed';
@@ -721,14 +715,14 @@
     const pending = alive(S.orders).filter((o) => o.status === 'pending').sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     const tomorrow = alive(S.orders).filter((o) => o.date === D.addDays(t, 1) && o.status !== 'cancelled').sort((a, b) => a.time.localeCompare(b.time));
     const vipOrders = todayOrders.filter((o) => { const c = orderCustomer(o); return c && (c.tags || []).some((x) => /VIP|老友/i.test(x)); });
-    // 流程待办：店长 → 配菜 / 审核老板生成的菜单；老板 → 发客户 / 收确认
+    // 流程待办：店长 → 配菜 / 审核老板生成的菜单；老板 → 生成菜单 / 发客户 / 收确认
     const todo = alive(S.orders).filter((o) => ['pending', 'confirmed', 'notified'].includes(o.status)).filter((o) => {
       const st = orderFlow(o);
-      if (session.role === 'manager') return st === 'manager' || st === 'review';
-      if (session.role === 'boss') return st === 'boss' || st === 'customer';
+      if (session.role === 'manager') return ['new', 'menu', 'review'].includes(st);
+      if (session.role === 'boss') return st === 'new' || st === 'customer';
       return false;
     }).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-    const todoLabel = session.role === 'manager' ? '待我配菜 / 审核' : '待我发客户 / 收确认';
+    const todoLabel = session.role === 'manager' ? '待我配菜 / 审核' : '待生成菜单 / 发客户';
     return '<div class="hero"><div class="hero-date">' + D.fmtDateCN(t) + ' · ' + D.weekdayCN(t) + ' · ' + esc(S.settings.cuisine || '') + '</div>' +
       '<h2>' + nowGreeting() + '，' + esc(roleName()) + '</h2><p>' + (todayOrders.length ? '今天有 ' + todayOrders.length + ' 桌客人，忙而不乱。' : '今天还没有预定，先把客人接住。') + '</p>' +
       '<div class="hero-stats">' +
@@ -1152,6 +1146,10 @@
     ui.stack = [{ view: 'orders', params: {} }];
     ui.view = 'orderDetail'; ui.params = { orderId: order.id };
     render();
+    // 新单存好后直接进 AI 配菜：老板挑一套采用，这单就进「待店长审核」
+    if (!existingEdit && can('aiMenu') && order.budget) {
+      setTimeout(function () { openMenuPlanner('order'); }, 260);
+    }
   }
   function nextOrderCode(date) {
     const prefix = 'CJX-' + String(date || '').replace(/-/g, '');
@@ -1244,7 +1242,7 @@
       o.menuSource = 'ai';
       o.dishConfirmed = true;
       if (roomId) o.roomId = roomId;
-      // 老板身份生成的 AI 菜单要过店长审核；店长自己生成的直接进入「出菜单」
+      // 老板身份生成的 AI 菜单要过店长审核；店长自己配的菜不用再审，直接可发客户
       const bossGen = session.role === 'boss';
       o.flow = o.flow || { stage: 'new', history: [] };
       if (bossGen) {
@@ -1252,12 +1250,12 @@
         setFlow(o, 'review', '老板 AI 出 ' + items.length + ' 道菜 · ' + D.money(m.total) + '，待店长审核');
       } else {
         delete o.flow.bossGen;
-        setFlow(o, 'menu', 'AI 出 ' + items.length + ' 道菜 · ' + D.money(m.total));
+        setFlow(o, 'customer', '店长 AI 出 ' + items.length + ' 道菜 · ' + D.money(m.total) + '，可直接发客户');
       }
       S.meta.rev++;
       saveState({ snap: true });
       closeSheet(); render({ scroll: false });
-      toast(bossGen ? '菜单已生成，待店长审核后发客户' : '菜单已生成' + roomNote);
+      toast(bossGen ? '菜单已生成，待店长审核后发客户' : '菜单已生成，可以直接发客户确认' + roomNote);
     } else {
       const d = ui.form.data;
       d.dishes = items;
@@ -1267,6 +1265,52 @@
       closeSheet(); render({ scroll: false });
       toast('已采用，' + D.money(m.total) + (roomNote ? roomNote : ' / ' + (m.within ? '在餐标内' : '略超餐标')));
     }
+  }
+
+  /* ---------- 店长审核：直接调整菜品 ---------- */
+  function openReviewDishSheet(id) {
+    const o = alive(S.orders).find((x) => x.id === id); if (!o) return;
+    if (session.role !== 'manager') { toast('只有店长可以调整菜品'); return; }
+    ui.reviewDishes = (o.dishes || []).map((x) => {
+      const d = typeof x === 'string' ? (D.dishByName(S, x) || {}) : x;
+      return { id: d.id || '', name: d.name || String(x), price: Number(d.price) || 0, category: d.category || '', status: d.status || 'on', leadDays: Number(d.leadDays) || 0 };
+    });
+    renderReviewDishSheet(o.id);
+  }
+  function renderReviewDishSheet(id) {
+    const o = alive(S.orders).find((x) => x.id === id); if (!o) return;
+    const cur = ui.reviewDishes || [];
+    const names = new Set(cur.map((x) => x.name));
+    const sum = cur.reduce((n, x) => n + (Number(x.price) || 0), 0);
+    const per = Math.round(sum / (Number(o.partySize) || 1));
+    const lib = alive(S.dishes).filter((x) => x.status !== 'off' && !names.has(x.name)).sort((a, b) => a.price - b.price);
+    const curHtml = cur.length ? cur.map((x, i) => '<button type="button" class="pick dish-opt on" data-act="rdel" data-id="' + esc(id) + '" data-i="' + i + '"><span>' + esc(x.name) + '</span><span class="st">' + D.money(x.price) + ' ×</span></button>').join('') : '<div class="muted small">这桌还没菜，从下面的菜品库里点几道</div>';
+    const libHtml = lib.map((x) => '<button type="button" class="pick dish-opt" data-act="radd" data-id="' + esc(id) + '" data-dish="' + x.id + '"><span>' + esc(x.name) + '</span><span class="st">' + D.money(x.price) + '</span></button>').join('');
+    openSheet('<h3>调整菜品 · ' + esc(o.customerName || '这一桌') + '</h3>' +
+      '<p class="sheet-sub">本桌 <b>' + cur.length + '</b> 道 · 合计 <b>' + D.money(sum) + '</b> · 人均 <b>' + D.money(per) + '</b>。点上面的菜名可删，点下面的菜可加。</p>' +
+      '<div class="dish-group"><h4>本桌菜品（点一下删掉）</h4><div class="pick-grid">' + curHtml + '</div></div>' +
+      '<div class="dish-group"><h4>菜品库（点一下加进来）</h4><div class="pick-grid">' + libHtml + '</div></div>' +
+      '<div class="btn-row mt8"><button class="btn primary" data-act="rsave" data-id="' + esc(id) + '">保存调整</button><button class="btn ghost" data-act="close-sheet">取消</button></div>' +
+      '<div class="hint">保存后这单仍在「店长审核」，确认没问题再点「审核通过」。</div>');
+  }
+  function saveReviewDishes(id) {
+    const o = alive(S.orders).find((x) => x.id === id); if (!o) return;
+    const after = ui.reviewDishes || [];
+    if (!after.length) { toast('至少留一道菜'); return; }
+    const before = (o.dishes || []).map((x) => (typeof x === 'string' ? x : x.name));
+    const afterNames = after.map((x) => x.name);
+    const added = afterNames.filter((n) => !before.includes(n));
+    const removed = before.filter((n) => !afterNames.includes(n));
+    o.dishes = after.map((x) => ({ id: x.id, name: x.name, price: x.price, category: x.category, status: x.status, leadDays: x.leadDays }));
+    o.menuSource = 'manual';
+    const parts = [];
+    if (removed.length) parts.push('删 ' + removed.join('、'));
+    if (added.length) parts.push('加 ' + added.join('、'));
+    addLog(o, '店长调整菜品' + (parts.length ? '：' + parts.join('；') : '（未改动）'));
+    touch(o);
+    S.meta.rev++; ui.reviewDishes = null;
+    saveState({ snap: true }); closeSheet(); render({ scroll: false });
+    toast(parts.length ? '已调整菜品' : '菜品没有变化');
   }
 
   /* ---------- 订单详情 ---------- */
@@ -1285,12 +1329,10 @@
   function nextStepHint(o, stage) {
     const mgr = session.role === 'manager';
     const map = {
-      new: mgr ? ['这单要你配菜', 'AI 按人数和餐标出菜单，并自动排包厢'] : ['转给店长配菜', '转给店长后，店长首页「待我配菜」会出现这单'],
-      manager: ['等店长配菜', 'AI 按人数和餐标出三套菜单，并自动排包厢'],
-      menu: ['菜单已出，可直接发客户', '点「直接发客户确认」把菜单确认页发给客户；也可先发老板过目'],
-      review: mgr ? ['老板出的菜单，待你审核', '审核通过后交回老板，老板和店长都能直接转发客户'] : ['菜单已交店长审核', '店长审核通过后，你和店长都能直接转发给客户确认'],
-      boss: ['可以发客户了', '点「转发给客户确认」复制菜单链接，客户点开就能一键确认'],
-      customer: ['等客户确认', '客户回复后把整段回复粘进「录入客户确认码」，自动确认并生成邀请函'],
+      new: mgr ? ['这单要你配菜', 'AI 按人数、餐标、忌口出菜单，并自动排包厢'] : ['一键生成菜单', 'AI 按人数、餐标、忌口出菜单并自动排包厢，生成后交店长审核'],
+      menu: ['菜单已出', '可直接发客户确认；想再换一套就点「AI 自动配菜」'],
+      review: mgr ? ['老板出的菜单，待你审核', '核对菜品够不够：要改就点「调整菜品」，没问题直接审核通过'] : ['菜单已交店长审核', '店长通过后，你和店长都能直接转发给客户确认'],
+      customer: ['转发菜单给客户确认', '点「转发菜单给客户确认」把链接发给客户；客户确认后录入确认码，直接出邀请函'],
       confirmed: ['客户已确认菜单', '生成邀请函长图，在微信里长按转发给客人']
     };
     return map[stage] || ['下一步', ''];
@@ -1314,21 +1356,17 @@
     const stepActions = [];
     const adminActions = [];
     if (canManage) {
-      if (stage === 'new') {
-        // 店长自己打开新单：转给自己没意义，直接给配菜入口
-        if (session.role === 'manager') stepActions.push('<button class="btn gold block" data-act="ai-menu">' + I.spark + ' AI 自动配菜 + 排包厢</button>');
-        else stepActions.push('<button class="btn primary block" data-act="flow-manager">' + I.share + ' 转给店长配菜</button>');
+      if (stage === 'new' || stage === 'menu') {
+        stepActions.push('<button class="btn gold block" data-act="ai-menu">' + I.spark + ' AI 自动配菜' + (session.role === 'boss' ? '，交店长审核' : '') + '</button>');
+        if (stage === 'menu') stepActions.push('<button class="btn primary" data-act="flow-customer">' + I.share + ' 直接发客户确认</button>');
       }
-      if (stage === 'manager') stepActions.push('<button class="btn gold block" data-act="ai-menu">' + I.spark + ' AI 自动配菜 + 排包厢</button>');
-      if (stage === 'menu') stepActions.push('<button class="btn gold block" data-act="flow-customer">' + I.share + ' 直接发客户确认</button><button class="btn primary" data-act="flow-boss">' + I.share + ' 发给老板确认</button><button class="btn soft" data-act="ai-menu">重新配菜</button>');
       if (stage === 'review') {
-        if (session.role === 'manager') stepActions.push('<button class="btn gold block" data-act="review-pass">' + I.check + ' 审核通过，交老板发客户</button><button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button><button class="btn soft" data-act="ai-menu">重新配菜</button>');
+        if (session.role === 'manager') stepActions.push('<button class="btn gold block" data-act="review-pass">' + I.check + ' 审核通过，转客户确认</button><button class="btn soft" data-act="review-edit-dishes" data-id="' + o.id + '">调整菜品</button><button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button><button class="btn soft" data-act="ai-menu">重新配菜</button>');
         else stepActions.push('<button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button><button class="btn soft" data-act="ai-menu">重新配菜</button>');
       }
-      if (stage === 'boss') stepActions.push('<button class="btn gold block" data-act="flow-customer">' + I.share + ' 转发给客户确认</button><button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button>');
-      if (stage === 'customer') stepActions.push('<button class="btn gold block" data-act="import-menu-confirm">' + I.check + ' 录入客户确认码</button><button class="btn soft" data-act="flow-confirm">' + I.check + ' 客户已确认菜品</button><button class="btn soft" data-act="flow-customer">再发一次</button>');
+      if (stage === 'customer') stepActions.push('<button class="btn gold block" data-act="flow-customer">' + I.share + ' 转发菜单给客户确认</button><button class="btn primary" data-act="import-menu-confirm">' + I.check + ' 录入客户确认码</button><button class="btn soft" data-act="flow-confirm">客户已确认</button><button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button>');
       if (stage === 'confirmed' && o.status !== 'cancelled') stepActions.push('<button class="btn gold block" data-act="open-invite">' + I.share + ' 生成/发送邀请函</button>');
-      else if (o.status !== 'cancelled') stepActions.push('<button class="btn ghost xs block" data-act="open-invite">' + I.share + ' 邀请函（待客户确认菜单后才能生成）</button>');
+      if (stage !== 'confirmed' && o.status !== 'cancelled') adminActions.push('<button class="btn ghost" data-act="open-invite">' + I.share + ' 邀请函（待客户确认菜单）</button>');
       if (o.status === 'pending') adminActions.push('<button class="btn primary" data-act="confirm-order">审核通过并通知</button>');
       if (o.status === 'confirmed') adminActions.push('<button class="btn primary" data-act="notify-order">通知后厨 / 服务员</button>');
       if (o.status === 'notified') adminActions.push('<button class="btn primary" data-act="complete-order">标记已完成</button>');
@@ -2693,14 +2731,29 @@
       case 'gen-menu': closeSheet(); openMenuPlanner(ui.menuTarget === 'order' ? 'order' : 'form'); break;
       case 'ai-menu': openMenuPlanner('order'); break;
       case 'adopt-menu': adoptMenu(el.dataset.key); break;
+      case 'review-edit-dishes': openReviewDishSheet(el.dataset.id || ui.params.orderId); break;
+      case 'rdel': {
+        const i = Number(el.dataset.i);
+        if (ui.reviewDishes && ui.reviewDishes[i]) { ui.reviewDishes.splice(i, 1); renderReviewDishSheet(el.dataset.id); }
+        break;
+      }
+      case 'radd': {
+        const d = alive(S.dishes).find((x) => x.id === el.dataset.dish);
+        if (!d) break;
+        ui.reviewDishes = ui.reviewDishes || [];
+        ui.reviewDishes.push({ id: d.id, name: d.name, price: Number(d.price) || 0, category: d.category || '', status: d.status || 'on', leadDays: Number(d.leadDays) || 0 });
+        renderReviewDishSheet(el.dataset.id);
+        break;
+      }
+      case 'rsave': saveReviewDishes(el.dataset.id); break;
       case 'review-pass': {
         const o = alive(S.orders).find((x) => x.id === ui.params.orderId); if (!o) break;
         if (session.role !== 'manager') { toast('只有店长可以审核'); break; }
-        confirmSheet('店长审核通过？', '通过后菜单交回老板，由老板转发给客户确认。', '审核通过', () => {
-          setFlow(o, 'boss', '店长审核通过');
+        confirmSheet('审核通过？', '通过后这一桌的菜单就定了，你和老板都能直接转发给客户确认。', '审核通过', () => {
+          setFlow(o, 'customer', '店长审核通过，可发客户');
           S.meta.rev++;
           saveState({ snap: true }); closeSheet(); render({ scroll: false });
-          toast('已审核通过，等老板发客户');
+          toast('已审核通过，可以转发给客户确认了');
         });
         break;
       }
@@ -2740,7 +2793,7 @@
       case 'copy-forward': {
         const o = alive(S.orders).find((x) => x.id === el.dataset.id); if (!o) break;
         copyText(el.dataset.text || '');
-        setFlow(o, el.dataset.stage || 'manager');
+        setFlow(o, el.dataset.stage || 'customer');
         S.meta.rev++;
         saveState({ snap: true });
         closeSheet(); render({ scroll: false });
