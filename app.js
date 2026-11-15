@@ -1137,19 +1137,30 @@
     else if (!existingEdit) order.changeLog.push({ at: D.nowISO(), by: roleName(), text: '创建预定' + (d.menuSource === 'ai' || d.menuSource === 'auto' ? '（AI 按餐标配菜）' : '') });
     else order.changeLog.push({ at: D.nowISO(), by: roleName(), text: '修改订单信息' });
     if (!existingEdit && !order.flow) order.flow = { stage: 'new', at: D.nowISO(), by: roleName(), history: [{ at: D.nowISO(), by: roleName(), stage: 'new', note: '接单' }] };
+    // 接单时已用 AI 出好菜单：保存即完成第一步，直接流转——老板出的交店长审核，店长出的可直接发客户，不再弹配菜窗
+    let menuNote = '';
+    if (!existingEdit && order.menuSource === 'ai' && (order.dishes || []).length) {
+      const aiTotal = D.orderTotal(order);
+      if (session.role === 'boss') {
+        order.flow.bossGen = true;
+        setFlow(order, 'review', '老板 AI 出 ' + order.dishes.length + ' 道菜 · ' + D.money(aiTotal) + '，待店长审核');
+        menuNote = '，菜单待店长审核';
+      } else if (session.role === 'manager') {
+        delete order.flow.bossGen;
+        setFlow(order, 'customer', '店长 AI 出 ' + order.dishes.length + ' 道菜 · ' + D.money(aiTotal) + '，可直接发客户');
+        menuNote = '，菜单可直接发客户确认';
+      }
+    }
     touch(order);
     if (!existingEdit) S.orders.push(order);
     S.meta.rev++;
     saveState({ snap: true });
-    toast((existingEdit ? (changePending ? '已保存，等待店长复核改单' : '已保存') : '已存为待审核') + dupNote);
+    toast((existingEdit ? (changePending ? '已保存，等待店长复核改单' : '已保存') : '已存为待审核' + menuNote) + dupNote);
     ui.form = null;
     ui.stack = [{ view: 'orders', params: {} }];
     ui.view = 'orderDetail'; ui.params = { orderId: order.id };
     render();
-    // 新单存好后直接进 AI 配菜：老板挑一套采用，这单就进「待店长审核」
-    if (!existingEdit && can('aiMenu') && order.budget) {
-      setTimeout(function () { openMenuPlanner('order'); }, 260);
-    }
+    // 没配菜的单留在「接单」阶段，详情页「下一步」卡里可一键 AI 配菜
   }
   function nextOrderCode(date) {
     const prefix = 'CJX-' + String(date || '').replace(/-/g, '');
