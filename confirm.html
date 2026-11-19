@@ -64,10 +64,11 @@
   .done .tick { width:52px; height:52px; margin:0 auto 8px; border-radius:50%; background:rgba(217,189,133,.16); border:1.5px solid var(--gold2); color:var(--gold2); font-size:26px; display:flex; align-items:center; justify-content:center; }
   .done b { font-family:"Songti SC","STSong","SimSun",serif; color:#f2e6c9; font-size:18px; letter-spacing:3px; display:block; }
   .done .cc { margin-top:8px; font-size:12px; color:var(--gold2); letter-spacing:1px; }
+  .done .okmsg { margin-top:12px; font-size:13px; color:#f2e6c9; line-height:1.75; }
   .done .reply { margin-top:10px; background:rgba(0,0,0,.25); border-radius:10px; padding:10px 11px; font-size:12px; color:rgba(247,243,234,.92); text-align:left; line-height:1.7; white-space:pre-wrap; word-break:break-all; }
   .done .copybtn { margin-top:12px; }
-  /* 确认后主操作是打开邀请函，复制回复降为次要按钮 */
-  .done #btnReplyCopy { background:rgba(217,189,133,.16); color:#f2e6c9; border:1.5px solid rgba(217,189,133,.55); box-shadow:none; font-weight:500; }
+  /* v1.9.0：确认后不再有「复制回复发回店里」，主操作只有查看邀请函 */
+  .done #btnReplyCopy { background:rgba(217,189,133,.16); color:#f2e6c9; border:1.5px solid rgba(217,189,133,.55); box-shadow:none; font-weight:500; display:none; }
   .done #linkInvite { font-size:15px; letter-spacing:.5px; }
   .hint2 { font-size:10.5px; color:var(--muted); margin-top:10px; text-align:center; line-height:1.7; }
   .contact { margin-top:16px; background:#fffdf9; border:1px solid var(--line); border-radius:16px; padding:13px 15px; font-size:12.5px; color:#6d6352; line-height:1.9; }
@@ -138,6 +139,23 @@
       if(btn){ const old=btn.textContent; btn.textContent=okLabel||'已复制'; setTimeout(()=>btn.textContent=old,1500); }
     }catch(e){ alert('复制失败，请长按文字手动复制'); }
   }
+  // v1.9.0：客户点确认后自动写一条回执到店里（匿名 insert，仅提交了订单号与确认码，不含客人隐私）
+  // 店里定时同步会读到它并自动把订单标为「客户已确认」，老板和店长同时看到，无需客户再复制回复发回来
+  function submitConfirm(){
+    const sy=P.sy;
+    if(!sy||!sy.u||!sy.k) return Promise.resolve(false);
+    const row={
+      id:'MC-'+String(o.id||'')+'-'+String(P.cc||''),
+      order_id:o.id||'', invite_code:P.cc||'', guest_name:o.h||'主客', phone:'',
+      attend:true, dietary:[], party_size:Number(o.ps)||1,
+      submitted_at:new Date().toISOString(), source:'menu_confirm'
+    };
+    return fetch(String(sy.u).replace(/\/+$/,'')+'/rest/v1/cjx_rsvps',{
+      method:'POST',
+      headers:{ 'apikey':sy.k, 'Authorization':'Bearer '+sy.k, 'Content-Type':'application/json', 'Prefer':'return=minimal' },
+      body:JSON.stringify(row)
+    }).then(function(r){ return r.ok||r.status===409; }).catch(function(){ return false; });
+  }
 
   const pre=menu.filter(x=>x.s==='preorder');
   const diet=(o.di||[]).filter(x=>x&&x!=='无忌口');
@@ -166,13 +184,14 @@
         '<textarea id="adjText" placeholder="比如：清蒸石斑换成辣炒口味、加一份佛跳墙、孩子不吃辣……"></textarea>'+
         '<button class="copybtn" id="btnAdjCopy">复制反馈 · 发回给店里</button>'+
       '</div>'+
-      '<div class="hint2">点「确认」后会生成一句确认回复，复制发回店家微信即可；<br>也可以直接回复本链接的转发消息。</div>'+
+      '<div class="hint2">点「确认」即完成，店家会自动收到，<b>不用再复制回复发回来</b>；确认后可直接看邀请函。</div>'+
     '</div>'+
     '<div class="done" id="doneBox" style="display:none">'+
       '<div class="tick">✓</div><b id="doneTitle">已 确 认</b>'+
-      '<div class="cc">订单 '+esc(o.code||'')+' · 确认码 '+esc(P.cc||'')+'</div>'+
-      '<div class="reply" id="replyText"></div>'+
-      '<button class="copybtn" id="btnReplyCopy">复制回复 · 发回给店里</button>'+
+      '<div class="cc" id="doneCc">订单 '+esc(o.code||'')+'</div>'+
+      '<div class="okmsg" id="okMsg">已确认。</div>'+
+      '<div class="reply" id="replyText" style="display:none"></div>'+
+      '<button class="copybtn" id="btnReplyCopy">复制反馈</button>'+
       '<a class="copybtn" id="linkInvite" href="#" style="display:block;text-align:center;line-height:46px;text-decoration:none;margin-top:10px">查看邀请函 · 可转发给同席亲友</a>'+
       '<div class="hint2" style="color:rgba(231,214,174,.6)">邀请函已生成，点上面按钮打开，转发给同席的亲友即可。</div>'+
     '</div>'+
@@ -188,13 +207,22 @@
   let finalText='';
   $('#linkInvite').setAttribute('href', inviteLink());
   $('#btnOk').addEventListener('click',()=>{
-    finalText=replyText('ok');
+    // v1.9.0：确认即完成，不再生成「复制回复发回店里」
     $('#actBox').style.display='none';
     $('#doneTitle').textContent='已 确 认';
-    $('#replyText').textContent=finalText;
+    $('#doneCc').textContent='订单 '+String(o.code||'');
+    $('#replyText').style.display='none';
+    $('#btnReplyCopy').style.display='none';
+    $('#linkInvite').style.display='block';
     $('#linkInvite').setAttribute('href', inviteLink());
+    $('#okMsg').textContent=(P.sy&&P.sy.u)?'正在通知店家…':'已确认，无需再回复；店家会在系统里为您登记。';
     $('#doneBox').style.display='block';
     $('#doneBox').scrollIntoView({behavior:'smooth',block:'center'});
+    submitConfirm().then(function(ok){
+      $('#okMsg').textContent=ok
+        ?'✓ 已通知店家，老板和店长都能看到，无需再回复。'
+        :((P.sy&&P.sy.u)?'已确认；通知暂未送达，微信里跟店家说一声「可以」即可。':'已确认，无需再回复；店家会在系统里为您登记。');
+    });
   });
   $('#btnAdj').addEventListener('click',()=>{
     const box=$('#adjBox');
@@ -210,13 +238,18 @@
     const txt=$('#adjText').value.trim();
     if(!txt){ alert('先写一点想调整的内容，或点上面的快捷标签'); return; }
     finalText=replyText('adj',txt);
-    copy(finalText,e.target,'已复制 · 发回给店里吧');
+    copy(finalText,e.target,'已复制 · 发给店家吧');
     $('#actBox').style.display='none';
     $('#doneTitle').textContent='反 馈 已 备 好';
+    $('#doneCc').textContent='订单 '+String(o.code||'');
+    $('#okMsg').textContent='您的意见已写好，复制后微信发给店家，店家会按这个调整菜单。';
     $('#replyText').textContent=finalText;
+    $('#replyText').style.display='block';
+    $('#btnReplyCopy').style.display='block';
+    $('#linkInvite').style.display='none';
     $('#doneBox').style.display='block';
   });
-  $('#btnReplyCopy').addEventListener('click',(e)=>copy(finalText||replyText('ok'),e.target,'已复制 · 发回给店里吧'));
+  $('#btnReplyCopy').addEventListener('click',(e)=>copy(finalText||$('#replyText').textContent,e.target,'已复制 · 发给店家吧'));
 })();
 </script>
 </body>

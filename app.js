@@ -326,7 +326,7 @@
     if (type === 'rooms') return { id: o.id, name: o.name, seats: Number(o.maxSeats) || Number(o.seats) || 0, sort: o.sort || 0, enabled: o.enabled !== false, note: roomNoteOf(o), updated_at: o.updatedAt, deleted: !!o.deleted };
     if (type === 'dishes') return { id: o.id, name: o.name, category: o.category, price: Number(o.price) || 0, status: o.status, lead_days: Number(o.leadDays) || 0, tags: o.tags || [], flavor: o.flavor || [], note: o.note || '', updated_at: o.updatedAt, deleted: !!o.deleted };
     if (type === 'customers') return { id: o.id, name: o.name, aliases: o.aliases || [], wechat: o.wechat || '', phone: o.phone || '', tags: o.tags || [], dietary: o.dietary || [], taste_tags: o.tasteTags || [], taste_scores: o.tasteScores || {}, dish_counts: o.dishCounts || {}, pref_room: o.prefRoom || '', notes: o.notes || '', visit_count: Number(o.visitCount) || 0, last_visit: o.lastVisit || null, budget_pref: o.budgetPref || null, budget_mode: o.budgetMode || 'table', updated_at: o.updatedAt, deleted: !!o.deleted };
-    if (type === 'orders') return { id: o.id, code: o.code, status: o.status, date: o.date, time: o.time, party_size: Number(o.partySize) || 0, room_id: o.roomId || '', customer_id: o.customerId || '', customer_name: o.customerName || '', phone: o.phone || '', wechat: o.wechat || '', occasion: o.occasion || '', dishes: o.dishes || [], dietary: o.dietary || [], taste_hints: o.tasteHints || [], special: o.special || '', host_name: o.hostName || '', notes: o.notes || '', budget: o.budget || null, budget_mode: o.budgetMode || 'table', menu_source: o.menuSource || 'manual', guests: o.guests || [], service_checks: o.serviceChecks || {}, invite_code: o.inviteCode || '', invite_at: o.inviteAt || null, missing: o.missing || [], change_log: o.changeLog || [], audit: Object.assign({}, o.audit || {}, { flow: o.flow || null, menuConfirmed: !!o.menuConfirmed, menuConfirmedAt: o.menuConfirmedAt || null }), change_pending: !!o.changePending, updated_at: o.updatedAt, deleted: !!o.deleted };
+    if (type === 'orders') return { id: o.id, code: o.code, status: o.status, date: o.date, time: o.time, party_size: Number(o.partySize) || 0, room_id: o.roomId || '', customer_id: o.customerId || '', customer_name: o.customerName || '', phone: o.phone || '', wechat: o.wechat || '', occasion: o.occasion || '', dishes: o.dishes || [], dietary: o.dietary || [], taste_hints: o.tasteHints || [], special: o.special || '', host_name: o.hostName || '', notes: o.notes || '', budget: o.budget || null, budget_mode: o.budgetMode || 'table', menu_source: o.menuSource || 'manual', guests: o.guests || [], service_checks: o.serviceChecks || {}, invite_code: o.inviteCode || '', invite_at: o.inviteAt || null, missing: o.missing || [], change_log: o.changeLog || [], audit: Object.assign({}, o.audit || {}, { flow: o.flow || null, menuConfirmed: !!o.menuConfirmed, menuConfirmedAt: o.menuConfirmedAt || null, menuConfirmedBy: o.menuConfirmedBy || '', menuConfirmedSource: o.menuConfirmedSource || '' }), change_pending: !!o.changePending, updated_at: o.updatedAt, deleted: !!o.deleted };
     if (type === 'rsvps') return { id: o.id, order_id: o.orderId, invite_code: o.inviteCode || '', guest_name: o.guestName || '', phone: o.phone || '', attend: o.attend !== false, dietary: o.dietary || [], party_size: Number(o.partySize) || 1, submitted_at: o.submittedAt || D.nowISO(), source: o.source || 'invite' };
     return o;
   }
@@ -334,7 +334,7 @@
     if (type === 'rooms') { const cap = roomCapFromNote(r.note, r.seats); return { id: r.id, name: r.name, seats: cap.max || r.seats, minSeats: cap.min, maxSeats: cap.max || r.seats, sort: r.sort, enabled: r.enabled, note: '', updatedAt: r.updated_at, deleted: !!r.deleted, _dirty: false }; }
     if (type === 'dishes') return { id: r.id, name: r.name, category: r.category, price: Number(r.price) || 0, status: r.status, leadDays: r.lead_days || 0, tags: r.tags || [], flavor: r.flavor || [], note: r.note || '', updatedAt: r.updated_at, deleted: !!r.deleted, _dirty: false };
     if (type === 'customers') return { id: r.id, name: r.name, aliases: r.aliases || [], wechat: r.wechat || '', phone: r.phone || '', tags: r.tags || [], dietary: r.dietary || [], tasteTags: r.taste_tags || [], tasteScores: r.taste_scores || {}, dishCounts: r.dish_counts || {}, prefRoom: r.pref_room || '', notes: r.notes || '', visitCount: r.visit_count || 0, lastVisit: r.last_visit || '', budgetPref: r.budget_pref || null, budgetMode: r.budget_mode || 'table', updatedAt: r.updated_at, deleted: !!r.deleted, _dirty: false };
-    if (type === 'orders') return { id: r.id, code: r.code, status: r.status, date: r.date, time: r.time, partySize: r.party_size, roomId: r.room_id || '', customerId: r.customer_id || '', customerName: r.customer_name || '', phone: r.phone || '', wechat: r.wechat || '', occasion: r.occasion || '', dishes: r.dishes || [], dietary: r.dietary || [], tasteHints: r.taste_hints || [], special: r.special || '', hostName: r.host_name || '', notes: r.notes || '', budget: r.budget || null, budgetMode: r.budget_mode || 'table', menuSource: r.menu_source || 'manual', guests: r.guests || [], serviceChecks: Object.assign({ tableware: false, pitcher: false, water: false, drink: false }, r.service_checks || {}), inviteCode: r.invite_code || '', inviteAt: r.invite_at || '', missing: r.missing || [], changeLog: r.change_log || [], audit: r.audit || {}, flow: (r.audit || {}).flow || null, menuConfirmed: !!(r.audit || {}).menuConfirmed, menuConfirmedAt: (r.audit || {}).menuConfirmedAt || '', changePending: !!r.change_pending, updatedAt: r.updated_at, deleted: !!r.deleted, _dirty: false };
+    if (type === 'orders') return { id: r.id, code: r.code, status: r.status, date: r.date, time: r.time, partySize: r.party_size, roomId: r.room_id || '', customerId: r.customer_id || '', customerName: r.customer_name || '', phone: r.phone || '', wechat: r.wechat || '', occasion: r.occasion || '', dishes: r.dishes || [], dietary: r.dietary || [], tasteHints: r.taste_hints || [], special: r.special || '', hostName: r.host_name || '', notes: r.notes || '', budget: r.budget || null, budgetMode: r.budget_mode || 'table', menuSource: r.menu_source || 'manual', guests: r.guests || [], serviceChecks: Object.assign({ tableware: false, pitcher: false, water: false, drink: false }, r.service_checks || {}), inviteCode: r.invite_code || '', inviteAt: r.invite_at || '', missing: r.missing || [], changeLog: r.change_log || [], audit: r.audit || {}, flow: (r.audit || {}).flow || null, menuConfirmed: !!(r.audit || {}).menuConfirmed, menuConfirmedAt: (r.audit || {}).menuConfirmedAt || '', menuConfirmedBy: (r.audit || {}).menuConfirmedBy || '', menuConfirmedSource: (r.audit || {}).menuConfirmedSource || '', changePending: !!r.change_pending, updatedAt: r.updated_at, deleted: !!r.deleted, _dirty: false };
     if (type === 'rsvps') return { id: r.id, orderId: r.order_id, inviteCode: r.invite_code || '', guestName: r.guest_name || '', phone: r.phone || '', attend: r.attend !== false, dietary: r.dietary || [], partySize: r.party_size || 1, submittedAt: r.submitted_at, source: r.source || 'invite' };
     return r;
   }
@@ -404,6 +404,7 @@
   }
   function attachRsvps() {
     (S.rsvps || []).forEach((r) => {
+      if (r.source === 'menu_confirm') return;   // 菜单确认回执不是亲友回执，别塞进宾客名单
       const o = (S.orders || []).find((x) => x.id === r.orderId);
       if (!o || o.deleted) return;
       o.guests = o.guests || [];
@@ -439,6 +440,7 @@
       const fullPull = !pullCursor || pullRounds % FULL_PULL_EVERY === 0;
       const data = await window.CJXSync.pullAll(fullPull ? null : { since: pullCursor, overlap: manual ? 600 : 300 });
       mergeRemote(data);
+      applyMenuConfirms();   // 客户确认页的回执落地：自动把这单标成「已确认」
       if (data._cursor) {
         pullCursor = data._cursor;
         try { localStorage.setItem(LS_CURSOR, pullCursor); } catch (e) { }
@@ -520,6 +522,11 @@
   }
   function setFlow(o, stage, note) {
     o.flow = o.flow || { stage: 'new', history: [] };
+    // 重新回到「发客户」或更早阶段（改菜、审核通过、重新转发）时，清掉上一轮的确认标记，
+    // 否则这单会带着旧的 menuConfirmed，导致改单后无法再次确认、邀请函也被误放行
+    if (stage !== 'confirmed' && o.menuConfirmed) {
+      o.menuConfirmed = false; o.menuConfirmedBy = ''; o.menuConfirmedSource = '';
+    }
     o.flow.stage = stage;
     o.flow.at = D.nowISO();
     o.flow.by = roleName();
@@ -1343,7 +1350,7 @@
       new: mgr ? ['这单要你配菜', 'AI 按人数、餐标、忌口出菜单，并自动排包厢'] : ['一键生成菜单', 'AI 按人数、餐标、忌口出菜单并自动排包厢，生成后交店长审核'],
       menu: ['菜单已出', '可直接发客户确认；想再换一套就点「AI 自动配菜」'],
       review: mgr ? ['老板出的菜单，待你审核', '核对菜品够不够：要改就点「调整菜品」，没问题直接审核通过'] : ['菜单已交店长审核', '店长通过后，你和店长都能直接转发给客户确认'],
-      customer: ['转发菜单给客户确认', '点「转发菜单给客户确认」把链接发给客户；客户确认后录入确认码，直接出邀请函'],
+      customer: ['转发菜单给客户确认', '客户点「确认」即自动同步，两端都能看到；客户在忙，老板可点「代客确认」，确认后直接出邀请函'],
       confirmed: ['客户已确认菜单', '生成邀请函长图，在微信里长按转发给客人']
     };
     return map[stage] || ['下一步', ''];
@@ -1375,7 +1382,9 @@
         if (session.role === 'manager') stepActions.push('<button class="btn gold block" data-act="review-pass">' + I.check + ' 审核通过，转客户确认</button><button class="btn soft" data-act="review-edit-dishes" data-id="' + o.id + '">调整菜品</button><button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button><button class="btn soft" data-act="ai-menu">重新配菜</button>');
         else stepActions.push('<button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button><button class="btn soft" data-act="ai-menu">重新配菜</button>');
       }
-      if (stage === 'customer') stepActions.push('<button class="btn gold block" data-act="flow-customer">' + I.share + ' 转发菜单给客户确认</button><button class="btn primary" data-act="import-menu-confirm">' + I.check + ' 录入客户确认码</button><button class="btn soft" data-act="flow-confirm">客户已确认</button><button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button>');
+      if (stage === 'customer') stepActions.push('<button class="btn gold block" data-act="flow-customer">' + I.share + ' 转发菜单给客户确认</button>' +
+        (isBoss ? '<button class="btn primary" data-act="proxy-confirm">' + I.check + ' 代客确认（客户口头同意）</button>' : '<button class="btn soft" data-act="proxy-confirm">' + I.check + ' 客户已确认 · 直接收尾</button>') +
+        '<button class="btn soft" data-act="preview-confirm" data-id="' + o.id + '">预览确认页</button>');
       if (stage === 'confirmed' && o.status !== 'cancelled') stepActions.push('<button class="btn gold block" data-act="open-invite">' + I.share + ' 生成/发送邀请函</button>');
       if (stage !== 'confirmed' && o.status !== 'cancelled') adminActions.push('<button class="btn ghost" data-act="open-invite">' + I.share + ' 邀请函（待客户确认菜单）</button>');
       if (o.status === 'pending') adminActions.push('<button class="btn primary" data-act="confirm-order">审核通过并通知</button>');
@@ -1559,6 +1568,36 @@
   }
 
   /* ---------- 客户菜单确认环节 ---------- */
+  // v1.9.0：确认统一入口——客户确认页自动同步 / 老板店长代客确认 / 旧回复兼容都走这里。
+  // 只改状态与写日志，落盘和渲染交给调用方，避免同步回调里重复保存。
+  function markMenuConfirmed(o, opt) {
+    if (!o || o.menuConfirmed) return false;
+    const a = opt || {};
+    o.menuConfirmed = true;
+    o.menuConfirmedAt = a.at || D.nowISO();
+    o.menuConfirmedBy = a.by || '客户';
+    o.menuConfirmedSource = a.source || 'link';
+    setFlow(o, 'confirmed', a.note || '客户已确认菜单');
+    return true;
+  }
+  // 客户在确认页点「确认」会匿名写一条 source=menu_confirm 回执；同步下来后自动收尾，
+  // 老板和店长两端都进「已确认」，不再需要客户复制回复发回店里。
+  function applyMenuConfirms() {
+    let changed = false;
+    (S.rsvps || []).forEach((r) => {
+      if (r.source !== 'menu_confirm') return;
+      const o = (S.orders || []).find((x) => x.id === r.orderId && !x.deleted);
+      if (!o || o.menuConfirmed) return;
+      if (r.inviteCode && r.inviteCode !== ccOf(o.id)) return;   // 确认码校验，防误确认
+      if (markMenuConfirmed(o, { by: '客户（确认页）', source: 'cloud', at: r.submittedAt || D.nowISO(), note: '客户在确认页点「确认」，已自动同步' })) changed = true;
+    });
+    if (changed) {
+      S.meta.rev++;
+      saveState({ snap: true });   // 渲染交给 syncPull 末尾的 refreshCurrent，避免同步流程中重复 render
+      toast('客户已确认菜单，老板和店长都能看到，可以直接出邀请函');
+    }
+    return changed;
+  }
   // 确认码由订单 id 确定性生成：客户确认页显示同一串码，回贴回来即可校验，不需要后端
   function ccOf(id) {
     const s = String(id || '');
@@ -1568,9 +1607,12 @@
   }
   function confirmPayload(o) {
     const s = S.settings;
+    // 云端已登录时把匿名回执通道带给确认页：客户点「确认」就能自动写回店里，不用复制回复
+    const sync = syncReady() ? window.CJXSync.getConfig() : null;
     const mgr = (s.managerName || s.managerPhone) ? { n: s.managerName || '', p: s.managerPhone || s.phone || '', t: s.managerTitle || '包厢服务经理' } : null;
     return {
-      v: 1, t: 'confirm', cc: ccOf(o.id),
+      v: 2, t: 'confirm', cc: ccOf(o.id),
+      sy: sync ? { u: sync.url, k: sync.anonKey } : null,
       // s/c 同时够客户确认页和邀请函页用：客户点「确认」后当场拼邀请函链接，不用再等店里发
       s: { n: s.shopName, c: s.cuisine, h: s.businessHours, p: s.phone, a: s.address, g: s.slogan || '', ad: s.adText || '', m: mgr },
       c: D.classicDishes(S, 6).map((d) => ({ n: d.name, pr: Number(d.price) || 0, no: d.note || '' })),
@@ -1589,14 +1631,17 @@
     const text = menuTextForCustomer(o) + '\n菜单确认链接（点开看完菜，点一下「确认」就行）：\n' + link;
     const host = location.hostname || '';
     const badHost = location.protocol === 'file:' || host === 'localhost' || host === '127.0.0.1';
-    openSheet('<h3>菜单发给客户确认</h3><p class="sheet-sub">客户在微信里点开确认页：看完菜单点「确认」或写调整意见，把回复发回来，您录入后流程自动收尾。</p>' +
+    const cloudOn = syncReady();
+    openSheet('<h3>菜单发给客户确认</h3><p class="sheet-sub">客户在微信里点开确认页：看完菜单点一下「确认」就完成，' + (cloudOn ? '店里会自动收到，老板和店长同时看到，不用再回复。' : '不用再回复；客户在忙时由老板 / 店长代客确认。') + '</p>' +
       (badHost ? '<div class="alert-line" style="margin-bottom:10px">' + I.alert + '<div><b>当前是本地地址，客户手机打不开链接。</b>正式部署后再发送，或改用「只复制文字」。</div></div>' : '') +
       '<div class="share-text">' + esc(text) + '</div>' +
       '<div class="btn-row mt8"><button class="btn primary" data-act="copy-forward" data-id="' + o.id + '" data-stage="customer" data-text="' + esc(text) + '">' + I.share + ' 复制并标记已发送</button><button class="btn soft" data-act="copy-confirm-text" data-id="' + o.id + '">只复制文字（不带链接）</button></div>' +
       '<button class="btn ghost block mt8" data-act="preview-confirm" data-id="' + o.id + '">预览客户将看到的确认页</button>' +
-      '<button class="btn gold block mt8" data-act="import-menu-confirm" data-id="' + o.id + '">' + I.check + ' 客户回复了？录入确认收尾</button>' +
+      '<button class="btn soft block mt8" data-act="proxy-confirm" data-id="' + o.id + '">' + I.check + ' ' + (session.role === 'boss' ? '客户在忙？代客确认' : '客户已口头同意 · 直接确认') + '</button>' +
       '<button class="btn ghost block mt8" data-act="close-sheet">关闭</button>' +
-      '<div class="hint">客户点「确认」后会得到一句带确认码的回复；把那句话粘到「录入确认」里即可自动完成。客户直接回「可以 / 没问题」也认。</div>');
+      '<div class="hint">客户点「确认」即完成，<b>不用再复制回复发回店里</b>。' +
+        (cloudOn ? '已开启多人同步：确认会自动写回云端，老板和店长两端都进「已确认」；约 22 秒自动刷新，也可在设置里点「同步」立即刷新。'
+                 : '当前是本地模式，客户页无法回传；客户口头同意时店里点上面「代客确认」即可，邀请函当场生成。') + '</div>');
   }
   function openConfirmImportSheet(id) {
     openSheet('<h3>录入客户确认</h3><p class="sheet-sub">把客户发回的回复整段粘进来（含确认码的那句），系统自动识别。</p>' +
@@ -1615,9 +1660,7 @@
     const okByCode = up.includes(cc);
     const okByWords = String(o.code || '') && up.includes(String(o.code).toUpperCase()) && /确认|可以|没问题|OK/.test(up);
     if (!okByCode && !okByWords) { toast('没识别到确认信息：需要确认码 ' + cc + '，或订单号 + 确认字样'); return; }
-    o.menuConfirmed = true;
-    o.menuConfirmedAt = D.nowISO();
-    setFlow(o, 'confirmed', okByCode ? '客户确认码 ' + cc : '客户回复确认');
+    if (!markMenuConfirmed(o, { by: '店里录入回复', source: 'import', note: okByCode ? '客户确认码 ' + cc : '客户回复确认' })) { toast('这一单已经确认过了'); closeSheet(); return; }
     S.meta.rev++;
     saveState({ snap: true }); closeSheet(); render({ scroll: false });
     toast('客户已确认，邀请函已生成');
@@ -2336,7 +2379,7 @@
     const o = alive(S.orders).find((x) => x.id === id); if (!o) return;
     // 客户确认是必经步骤：未确认菜单的单子不能出邀请函，防止发出后改菜造成信息不一致
     if (orderFlow(o) !== 'confirmed') {
-      toast('菜单还没经过客户确认：先「转发菜单给客户确认」，客户回复后录入确认码，再生成邀请函');
+      toast('菜单还没经过客户确认：先「转发菜单给客户确认」，客户点确认即自动同步；客户在忙可点「代客确认」，之后即可生成邀请函');
       return;
     }
     doOpenInvite(o);
@@ -2811,18 +2854,21 @@
         toast('已复制，流程已前进一步');
         break;
       }
+      case 'proxy-confirm':
       case 'flow-confirm': {
-        const o = alive(S.orders).find((x) => x.id === ui.params.orderId); if (!o) break;
-        confirmSheet('客户已确认菜单？', '确认后流程走到「已确认」，邀请函会直接生成，发给客户就行。', '确认已确认', () => {
-          o.menuConfirmed = true;
-          o.menuConfirmedAt = D.nowISO();
-          setFlow(o, 'confirmed');
-          S.meta.rev++;
-          saveState({ snap: true });
-          closeSheet(); render({ scroll: false });
-          doOpenInvite(o);
-          toast('已确认，邀请函已生成');
-        });
+        const o = alive(S.orders).find((x) => x.id === (el.dataset.id || ui.params.orderId)); if (!o) break;
+        if (!(o.dishes || []).length) { toast('还没有菜单，先 AI 配菜'); break; }
+        if (o.menuConfirmed) { toast('这一单已经确认过了'); break; }
+        confirmSheet('代客确认菜单？',
+          '客户在忙、已口头同意推荐菜单时，' + (session.role === 'boss' ? '老板' : '店长') + '可以直接确认，不需要客户再复制回复发回来。确认后老板和店长都会看到「已确认」，邀请函当场生成。',
+          '确认已确认', () => {
+            if (!markMenuConfirmed(o, { by: roleName() + '代客', source: 'proxy', note: '客户口头同意，' + roleName() + '代客确认' })) { closeSheet(); return; }
+            S.meta.rev++;
+            saveState({ snap: true });
+            closeSheet(); render({ scroll: false });
+            doOpenInvite(o);
+            toast('已代客确认，老板和店长都能看到，邀请函已生成');
+          });
         break;
       }
       case 'save-role-qr': saveRoleQr(el.dataset.role); break;
@@ -3013,10 +3059,10 @@
     openSheet('<h3>长季鲜 · 一页纸使用说明</h3>' +
       '<div class="notice" style="line-height:1.85"><b>一条预定的完整走法</b><br>' +
       '① 老板接单，把客人微信聊天粘到「新建预定 → 微信聊天一键识别」，核对后保存。<br>' +
-      '② 保存后会自动弹出「AI 自动配菜」：只要有<b>人数 + 餐标</b>，系统出三套菜单，并按人数自动排包厢（VIP1/VIP2 坐 10–12 人，VIP3 坐 15–18 人），挑一套「采用」。<br>' +
+      '② 在接单表单里点「按人数 + 餐标自动出菜单」：系统出三套菜单并按人数自动排包厢（VIP1/VIP2 坐 10–12 人，VIP3 坐 15–18 人），挑一套「采用」，再点「保存为待审核」即完成接单。<br>' +
       '③ 老板出的菜单先交<b>店长审核</b>：店长核对菜品，要改就点「调整菜品」（点菜名删、点菜品库加），没问题点「审核通过」。店长自己配的菜不用审。<br>' +
-      '④ 审核通过后，<b>老板和店长都能</b>「转发菜单给客户确认」；客户在确认页点「确认」或提调整意见。<br>' +
-      '⑤ 店里点「录入客户确认码」收尾，<b>邀请函当场生成</b>；老板和店长都能再生成、都能直接转发。图片版像请柬一样转发微信，带地址、一键导航、店招广告位和招牌菜。<br><br>' +
+      '④ 审核通过后，<b>老板和店长都能</b>「转发菜单给客户确认」；客户在确认页点一下「确认」就完成，<b>不用再复制回复发回店里</b>。<br>' +
+      '⑤ 客户确认后<b>自动同步，老板和店长同时看到「已确认」</b>（开启多人同步时）；客户在忙、口头同意了推荐菜单，<b>老板可直接点「代客确认」</b>。<b>邀请函当场生成</b>，两人都能再生成、都能直接转发。图片版像请柬一样转发微信，带地址、一键导航、店招广告位和招牌菜。<br><br>' +
       '<b>权限</b><br>' +
       '老板：接单、审核、改菜单、上下架、AI 配菜、发客户、邀请函。<b>菜价只有店长能改</b>。<br>' +
       '店长：上下架、改菜、改菜价、AI 配菜、备货单、审核、邀请函。<br>' +
