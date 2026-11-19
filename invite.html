@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#14261f">
-<meta name="description" content="长季鲜私房菜邀请函：谨订信息、当日菜单、招牌菜与环境展示，一键导航到店。">
+<meta name="description" content="长季鲜私房菜邀请函：谨订信息、招牌菜与环境展示，一键导航到店。">
 <meta property="og:title" content="长季鲜 · 邀请函">
 <meta property="og:description" content="诚邀您共赴私宴，恭候台光。">
 <meta property="og:type" content="website">
@@ -42,8 +42,7 @@
   .sec-title { text-align:center; font-size:11px; letter-spacing:4px; color:var(--gold); margin:20px 0 10px; display:flex; align-items:center; gap:10px; }
   .sec-title::before,.sec-title::after { content:""; flex:1; height:1px; background:linear-gradient(90deg,transparent,rgba(184,137,63,.4)); }
   .sec-title::after { background:linear-gradient(90deg,rgba(184,137,63,.4),transparent); }
-  .dishes { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; }
-  .dish { background:#fffdf9; border:1px solid var(--line); border-radius:8px; padding:4px 10px; font-size:12px; color:#5f5748; }
+  /* 对外邀请函不展示当日菜单，.dishes/.dish 样式已移除 */
   .note { background:#fbf0dc; color:var(--amber); border-radius:10px; padding:9px 11px; font-size:12.5px; margin-top:14px; line-height:1.55; }
   /* 菜品展示：两列大图 */
   .dish-gallery { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -110,8 +109,9 @@
       return {
         shop:{ name:P.s.n, cuisine:P.s.c, hours:P.s.h, phone:P.s.p, address:P.s.a, slogan:P.s.g, adText:P.s.ad,
           manager:P.s.m ? { name:P.s.m.n, phone:P.s.m.p, title:P.s.m.t } : null },
-        classic:(P.c||[]).map(x=>({name:x.n,price:x.pr,note:x.no})),
-        order:{ date:P.o.d, time:P.o.t, room:P.o.r, host:P.o.h, partySize:P.o.s, occasion:P.o.c, special:P.o.sp, dishes:P.o.ds||[] }
+        // 只取菜名与备注：对外邀请函不展示菜价，旧链接即使还带 pr 也不再解析
+        classic:(P.c||[]).map(x=>({name:x.n,note:x.no})),
+        order:{ date:P.o.d, time:P.o.t, room:P.o.r, host:P.o.h, partySize:P.o.s, occasion:P.o.c, special:P.o.sp, dishes:P.o.ds||[] } // dishes 仅兼容旧链接，页面不再展示
       };
     }
     return { shop:P.shop||{}, classic:P.classic||[], order:P.order||{} };
@@ -147,7 +147,7 @@
   function render(){
     if(!P||!P.order){ $('#app').innerHTML='<div class="empty">邀请函链接无效或已过期。<br>请让主人家重新发一份。</div>'; return; }
     const shop=P.shop||{}; const o=P.order||{}; const mgr=shop.manager||{};
-    const dishes=(o.dishes||[]).slice(0,12);
+    // 对外邀请函只展示招牌菜：不展示当日菜单、不显示任何菜价
     const classic=(P.classic||[]).filter(x=>x&&x.name);
     const dishPic=(name)=>'photos/dish-'+encodeURIComponent(name)+'.jpg';
     const imgTag=(src)=>'<img src="'+esc(src)+'" alt="" loading="lazy" onerror="this.remove()">';
@@ -164,8 +164,7 @@
       '<div class="invite-body">'+
       '<div class="signboard"><b>'+esc(shop.name||'长季鲜')+'</b><span>'+esc(shop.slogan||'时令海鲜 · 私厨家宴')+(shop.adText?' · '+esc(shop.adText):'')+'</span><i>店 招 广 告 位</i></div>'+
       (o.special?'<div class="note">'+esc(o.special)+'</div>':'')+
-      (dishes.length?'<div class="sec-title">当 日 菜 单</div><div class="dishes">'+dishes.map(d=>'<span class="dish">'+esc(d)+'</span>').join('')+'</div>':'')+
-      (classic.length?'<div class="sec-title">菜 品 展 示</div><div class="dish-gallery">'+classic.slice(0,6).map(x=>'<div class="card"><div class="pic">'+imgTag(dishPic(x.name))+'</div><div class="cap"><b>'+esc(x.name)+'</b><span>'+(x.price?('¥ '+x.price+' / 份'):esc(x.note||'招牌必点'))+'</span></div></div>').join('')+'</div>':'')+
+      (classic.length?'<div class="sec-title">菜 品 展 示</div><div class="dish-gallery">'+classic.slice(0,6).map(x=>'<div class="card"><div class="pic">'+imgTag(dishPic(x.name))+'</div><div class="cap"><b>'+esc(x.name)+'</b><span>'+esc(String(x.note||'招牌必点').slice(0,12))+'</span></div></div>').join('')+'</div>':'')+
       '<div class="sec-title">环 境 展 示</div><div class="env">'+
         '<div class="pic wide">'+imgTag('photos/env-1.jpg')+'<span>大 厅 环 境</span></div>'+
         '<div class="row"><div class="pic half">'+imgTag('photos/env-2.jpg')+'<span>VIP 包厢</span></div>'+

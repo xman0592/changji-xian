@@ -2058,8 +2058,9 @@
     return {
       v: 4, t: 'invite',
       s: { n: s.shopName, c: s.cuisine, h: s.businessHours, p: s.phone, a: s.address || '', g: s.slogan || '', ad: s.adText || '', m: mgr },
-      c: D.classicDishes(S, 6).map((d) => ({ n: d.name, pr: Number(d.price) || 0, no: d.note || '' })),
-      o: { d: o.date, t: o.time, r: roomName(o.roomId), h: o.customerName, s: o.partySize, c: o.occasion, sp: o.special || '', ds: (o.dishes || []).map((d) => d.name || d) }
+      // 对外邀请函不携带当日菜单(ds)与菜价(pr)：只带招牌菜名与备注，链接更短也更干净
+      c: D.classicDishes(S, 6).map((d) => ({ n: d.name, no: d.note || '' })),
+      o: { d: o.date, t: o.time, r: roomName(o.roomId), h: o.customerName, s: o.partySize, c: o.occasion, sp: o.special || '' }
     };
   }
   const SERIF = '"Songti SC","STSong","SimSun",serif';
@@ -2224,25 +2225,7 @@
     ornament(ctx, W / 2, y, 360);
     y += 36;
 
-    // 当日菜单
-    const dishes = (o.dishes || []).map((d) => (typeof d === 'string' ? d : d.name)).filter(Boolean);
-    if (dishes.length) {
-      y = secTitle(ctx, W, y, '当 日 菜 单');
-      ctx.textAlign = 'left';
-      dishes.slice(0, 12).forEach((name, i) => {
-        const col = i % 2, row = Math.floor(i / 2);
-        const x = 170 + col * 440, yy = y + 16 + row * 52;
-        ctx.fillStyle = '#c9a45c'; ctx.beginPath(); ctx.arc(x - 20, yy - 9, 4, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#f7f3ea'; ctx.font = '28px ' + SERIF;
-        ctx.fillText(truncate(name, 11), x, yy);
-      });
-      y += 16 + Math.ceil(Math.min(dishes.length, 12) / 2) * 52 + 10;
-      if (dishes.length > 12) {
-        ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(231,214,174,.6)'; ctx.font = '22px sans-serif';
-        ctx.fillText('共 ' + dishes.length + ' 道菜 · 以到店时令为准', W / 2, y); y += 34;
-      }
-      y += 18; ornament(ctx, W / 2, y, 360); y += 36;
-    }
+    // 对外邀请函不展示当日菜单（本单点菜属内部信息），直接进入招牌菜品展示
 
     // 菜品展示：两列大图
     const classic = D.classicDishes(S, 6);
@@ -2258,7 +2241,7 @@
         ctx.fillStyle = '#f2e6c9'; ctx.font = '600 29px ' + SERIF;
         ctx.fillText(truncate(d.name, 10), x + cw / 2, yy + ih + 40);
         ctx.fillStyle = '#c9a45c'; ctx.font = '20px sans-serif';
-        ctx.fillText(d.price ? ('¥ ' + d.price + ' / 份') : truncate(d.note || '招牌必点', 12), x + cw / 2, yy + ih + 72);
+        ctx.fillText(truncate(d.note || '招牌必点', 12), x + cw / 2, yy + ih + 72);
       });
       y += Math.ceil(classic.length / 2) * (ih + 96 + gap);
       y += 20; ornament(ctx, W / 2, y, 360); y += 36;
@@ -3062,7 +3045,7 @@
       '② 在接单表单里点「按人数 + 餐标自动出菜单」：系统出三套菜单并按人数自动排包厢（VIP1/VIP2 坐 10–12 人，VIP3 坐 15–18 人），挑一套「采用」，再点「保存为待审核」即完成接单。<br>' +
       '③ 老板出的菜单先交<b>店长审核</b>：店长核对菜品，要改就点「调整菜品」（点菜名删、点菜品库加），没问题点「审核通过」。店长自己配的菜不用审。<br>' +
       '④ 审核通过后，<b>老板和店长都能</b>「转发菜单给客户确认」；客户在确认页点一下「确认」就完成，<b>不用再复制回复发回店里</b>。<br>' +
-      '⑤ 客户确认后<b>自动同步，老板和店长同时看到「已确认」</b>（开启多人同步时）；客户在忙、口头同意了推荐菜单，<b>老板可直接点「代客确认」</b>。<b>邀请函当场生成</b>，两人都能再生成、都能直接转发。图片版像请柬一样转发微信，带地址、一键导航、店招广告位和招牌菜。<br><br>' +
+      '⑤ 客户确认后<b>自动同步，老板和店长同时看到「已确认」</b>（开启多人同步时）；客户在忙、口头同意了推荐菜单，<b>老板可直接点「代客确认」</b>。<b>邀请函当场生成</b>，两人都能再生成、都能直接转发。图片版像请柬一样转发微信，带地址、一键导航、店招广告位和招牌菜；<b>不展示当日菜单、也不显示菜价</b>。<br><br>' +
       '<b>权限</b><br>' +
       '老板：接单、审核、改菜单、上下架、AI 配菜、发客户、邀请函。<b>菜价只有店长能改</b>。<br>' +
       '店长：上下架、改菜、改菜价、AI 配菜、备货单、审核、邀请函。<br>' +

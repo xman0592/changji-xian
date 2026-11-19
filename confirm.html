@@ -102,8 +102,9 @@
   function inviteLink(){
     const iv={ v:4, t:'invite',
       s:{ n:shop.n, c:shop.c, h:shop.h, p:shop.p, a:shop.a, g:shop.g||'', ad:shop.ad||'', m:shop.m||null },
-      c:P.c||[],
-      o:{ d:o.d, t:o.t, r:o.r, h:o.h, s:o.ps, c:o.oc||'', sp:o.sp||'', ds:menu.map(x=>x.n) } };
+      // 对外邀请函不携带当日菜单与菜价：只带招牌菜名与备注
+      c:(P.c||[]).map(x=>({ n:x.n, no:x.no||'' })),
+      o:{ d:o.d, t:o.t, r:o.r, h:o.h, s:o.ps, c:o.oc||'', sp:o.sp||'' } };
     // 带上 sharecode（托管站点的访问凭证），客户点开后邀请函才不会被 403
     const keep=new URLSearchParams();
     const sc=new URLSearchParams(location.search).get('sharecode');
