@@ -1643,6 +1643,26 @@
         (cloudOn ? '已开启多人同步：确认会自动写回云端，老板和店长两端都进「已确认」；约 22 秒自动刷新，也可在设置里点「同步」立即刷新。'
                  : '当前是本地模式，客户页无法回传；客户口头同意时店里点上面「代客确认」即可，邀请函当场生成。') + '</div>');
   }
+  // 预览客户确认页：不用 window.open（微信 / 移动端会被弹窗拦截，点了没反应），
+  // 直接在本页盖一层全屏 iframe，所见即所得；另留一个 <a target="_blank"> 兜底新窗口打开
+  function openConfirmPreview(o) {
+    const link = pageLink('confirm.html', { d: b64e(JSON.stringify(confirmPayload(o))), preview: 1 });
+    window.__confirmLink = link; // 供测试与调试取链接
+    const old = document.querySelector('.preview-layer');
+    if (old) old.remove();
+    const layer = document.createElement('div');
+    layer.className = 'preview-layer';
+    layer.innerHTML = '<div class="preview-bar">' +
+      '<span class="preview-title">客户将看到的确认页 · 预览</span>' +
+      '<a class="preview-open" href="' + esc(link) + '" target="_blank" rel="noopener">新窗口打开</a>' +
+      '<button type="button" class="preview-close" aria-label="关闭预览">关闭</button></div>' +
+      '<div class="preview-hint">这是预览：点页面里的「确认」不会真的通知店家</div>' +
+      '<iframe class="preview-frame" src="' + esc(link) + '" title="客户确认页预览"></iframe>';
+    document.body.appendChild(layer);
+    const close = () => layer.remove();
+    layer.querySelector('.preview-close').addEventListener('click', close);
+    window.__closeConfirmPreview = close;
+  }
   function openConfirmImportSheet(id) {
     openSheet('<h3>录入客户确认</h3><p class="sheet-sub">把客户发回的回复整段粘进来（含确认码的那句），系统自动识别。</p>' +
       '<div class="field"><textarea id="mcReply" placeholder="菜单已确认 · CXxxxx（确认码 Cxxxx）"></textarea></div>' +
@@ -2797,9 +2817,7 @@
       case 'preview-confirm': {
         const o = alive(S.orders).find((x) => x.id === (el.dataset.id || ui.params.orderId)); if (!o) break;
         if (!(o.dishes || []).length) { toast('还没有菜单，先 AI 配菜'); break; }
-        const link = pageLink('confirm.html', { d: b64e(JSON.stringify(confirmPayload(o))) });
-        window.__confirmLink = link;
-        window.open(link, '_blank');
+        openConfirmPreview(o);
         break;
       }
       case 'flow-manager': {
@@ -3105,7 +3123,10 @@
     handleAction(el);
   });
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closeSheet();
+    if (e.key === 'Escape') {
+      if (document.querySelector('.preview-layer')) { if (window.__closeConfirmPreview) window.__closeConfirmPreview(); return; }
+      closeSheet();
+    }
     if (e.key === 'Enter' && e.target && e.target.id === 'pinInput') { const b = document.querySelector('[data-act="pin-ok"]'); if (b) b.click(); }
   });
 

@@ -76,9 +76,11 @@
   .foot { text-align:center; color:rgba(247,243,234,.55); font-size:11.5px; line-height:1.9; margin-top:22px; }
   .foot b { color:var(--gold2); font-weight:500; }
   .empty { background:var(--paper); border-radius:18px; padding:40px 22px; text-align:center; color:var(--muted); margin-top:18px; }
+  .preview-banner { position:relative; z-index:2; text-align:center; background:#8a6a2c; color:#fff7e6; font-size:11.5px; letter-spacing:1px; padding:7px 10px; }
 </style>
 </head>
 <body>
+<div id="previewBanner" class="preview-banner" style="display:none">预 览 模 式 · 这是客户看到的页面，点「确认」不会通知店家</div>
 <div class="page">
   <div class="brand">長季鮮<small id="brandSub">福安菜 × 厦门海鲜</small></div>
   <div class="ornament"><i></i></div>
@@ -94,7 +96,10 @@
   function readPayload(){ const q=new URLSearchParams(location.search).get('d'); const m=String(location.hash||'').match(/d=([^&]+)/); const raw=q||(m&&m[1]); if(!raw) return null; try{ return JSON.parse(b64d(raw)); }catch(e){ return null; } }
   function fmtDate(s){ if(!s) return ''; const p=String(s).split('-').map(Number); const d=new Date(p[0],(p[1]||1)-1,p[2]||1); return (d.getMonth()+1)+'月'+d.getDate()+'日 周'+('日一二三四五六'[d.getDay()]); }
   const money=(n)=>'¥ '+(Number(n)||0).toLocaleString('zh-CN');
+  // 店家点「预览客户将看到的确认页」时带 preview=1：只展示，不写回执、不改订单
+  const isPreview=new URLSearchParams(location.search).get('preview')==='1';
   const P=readPayload();
+  if(isPreview){ const b=$('#previewBanner'); if(b) b.style.display='block'; }
   if(!P||!P.o){ $('#app').innerHTML='<div class="empty">菜单确认链接无效或已过期。<br>请让店家重新发一份。</div>'; return; }
   const shop=P.s||{}, o=P.o||{}, menu=P.m||[];
   // 客户点「确认」后当场拼邀请函链接（与 app.js invitePayload v4 同结构），确认即出函
@@ -143,6 +148,7 @@
   // v1.9.0：客户点确认后自动写一条回执到店里（匿名 insert，仅提交了订单号与确认码，不含客人隐私）
   // 店里定时同步会读到它并自动把订单标为「客户已确认」，老板和店长同时看到，无需客户再复制回复发回来
   function submitConfirm(){
+    if(isPreview) return Promise.resolve(false); // 预览模式绝不写回执
     const sy=P.sy;
     if(!sy||!sy.u||!sy.k) return Promise.resolve(false);
     const row={
@@ -216,10 +222,10 @@
     $('#btnReplyCopy').style.display='none';
     $('#linkInvite').style.display='block';
     $('#linkInvite').setAttribute('href', inviteLink());
-    $('#okMsg').textContent=(P.sy&&P.sy.u)?'正在通知店家…':'已确认，无需再回复；店家会在系统里为您登记。';
+    $('#okMsg').textContent=isPreview?'预览模式：这里不会通知店家，也不会改动订单。':((P.sy&&P.sy.u)?'正在通知店家…':'已确认，无需再回复；店家会在系统里为您登记。');
     $('#doneBox').style.display='block';
     $('#doneBox').scrollIntoView({behavior:'smooth',block:'center'});
-    submitConfirm().then(function(ok){
+    if(!isPreview) submitConfirm().then(function(ok){
       $('#okMsg').textContent=ok
         ?'✓ 已通知店家，老板和店长都能看到，无需再回复。'
         :((P.sy&&P.sy.u)?'已确认；通知暂未送达，微信里跟店家说一声「可以」即可。':'已确认，无需再回复；店家会在系统里为您登记。');
